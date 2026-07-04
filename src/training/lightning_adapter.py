@@ -13,7 +13,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from helper.display import is_interactive
 
-from .trl_adapter import _run_with_stderr_tee, _smoke_enabled
+from .runtime import run_with_stderr_tee, smoke_enabled
 
 
 class TrackioLightningLogger(Logger):
@@ -108,7 +108,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     experiment_dir = Path(str(cfg.experiment_dir))
     (experiment_dir / "logs").mkdir(parents=True, exist_ok=True)
-    smoke = _smoke_enabled(cfg)
+    smoke = smoke_enabled(cfg)
 
     mlog = MetricsLog(experiment_dir / "metrics.jsonl")
     mlog.append_event("run_start", task="lightning", run_name=OmegaConf.select(cfg, "tracking.run_name"), smoke=smoke)
@@ -145,7 +145,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
             mlog.append_event("meta", key=key, value=value)
 
     logger.info("Starting Lightning run (smoke={}) in {}", smoke, experiment_dir)
-    _run_with_stderr_tee(lambda: trainer.fit(module, datamodule=datamodule), experiment_dir)
+    run_with_stderr_tee(lambda: trainer.fit(module, datamodule=datamodule), experiment_dir)
 
     final_train_loss = _final_train_loss(trainer)
     print(f"VERDICT: TRAIN_OK | final_train_loss={final_train_loss}")

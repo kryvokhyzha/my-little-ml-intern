@@ -4,7 +4,8 @@ import pytest
 from omegaconf import OmegaConf
 
 from helper.display import get_console, is_interactive, print_table, run_footer, run_header
-from training import lightning_adapter, trl_adapter
+from training import lightning_adapter
+from training.trl import config as trl_config
 
 
 _ENV_VARS = ("CLAUDECODE", "NO_COLOR", "FORCE_RICH", "JSON_LOGS", "COLORIZE")
@@ -126,23 +127,23 @@ class TestAdapterProgressDefaults:
     def test_trl_disable_tqdm_when_non_interactive(self, trl_cfg, monkeypatch):
         from trl import SFTConfig
 
-        monkeypatch.setattr(trl_adapter, "is_interactive", lambda: False)
-        args = trl_adapter._build_args(trl_cfg, SFTConfig)
+        monkeypatch.setattr(trl_config, "is_interactive", lambda: False)
+        args = trl_config.build_args(trl_cfg, SFTConfig)
         assert bool(args.disable_tqdm) is True
 
     def test_trl_tqdm_kept_when_interactive(self, trl_cfg, monkeypatch):
         from trl import SFTConfig
 
-        monkeypatch.setattr(trl_adapter, "is_interactive", lambda: True)
-        args = trl_adapter._build_args(trl_cfg, SFTConfig)
+        monkeypatch.setattr(trl_config, "is_interactive", lambda: True)
+        args = trl_config.build_args(trl_cfg, SFTConfig)
         assert bool(args.disable_tqdm) is False
 
     def test_trl_cfg_value_wins_over_default(self, trl_cfg, monkeypatch):
         from trl import SFTConfig
 
-        monkeypatch.setattr(trl_adapter, "is_interactive", lambda: True)
+        monkeypatch.setattr(trl_config, "is_interactive", lambda: True)
         trl_cfg.trainer.args.disable_tqdm = True
-        args = trl_adapter._build_args(trl_cfg, SFTConfig)
+        args = trl_config.build_args(trl_cfg, SFTConfig)
         assert bool(args.disable_tqdm) is True
 
     def test_lightning_progress_bar_default(self, tmp_path, monkeypatch):

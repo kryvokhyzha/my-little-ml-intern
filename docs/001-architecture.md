@@ -271,7 +271,17 @@ A low loss number is never evidence the model works.
 
 ## src/training API
 
-- `trl_adapter.run_sft(cfg) -> dict` / `run_dpo(cfg) -> dict` — build
+Layout: `training/trl/` is the TRL subpackage (`rewards.py`, `config.py`,
+`run.py`; `run_sft`/`run_dpo`/`run_grpo` re-exported from `training.trl`).
+Framework-neutral plumbing is shared, not owned by a lane: `training/runtime.py`
+(stderr tee, `is_main_process`, `smoke_enabled`, `apply_tracking_group`),
+`training/models.py` (`load_model` with dtype/quant, `peft_config`),
+`training/sampling.py` (`SAMPLE_PROMPTS`, `write_samples`). Dataset loading
+lives in `data/` (`data.loading.load_split` / `require_prompt_column`,
+`data.synthetic.build_tiny_text_dataset`). The `lightning_adapter` imports the
+shared modules directly — never TRL internals.
+
+- `training.trl.run_sft(cfg) -> dict` / `run_dpo(cfg) -> dict` — build
   model/tokenizer/dataset from `cfg.trainer`, load models with explicit
   `cfg.trainer.dtype` (default `float32`; transformers v5 otherwise inherits the
   checkpoint's stored dtype, and fp16 full-precision training diverges), map
@@ -283,7 +293,7 @@ A low loss number is never evidence the model works.
   `logs/samples.jsonl` (one `{"prompt", "text"}` object per line) after
   training, print one line: `VERDICT: TRAIN_OK | final_train_loss=<v>` (or
   `TRAIN_FAIL | <cause>`).
-- `trl_adapter.run_grpo(cfg) -> dict` — mirrors `run_sft`/`run_dpo` via
+- `training.trl.run_grpo(cfg) -> dict` — mirrors `run_sft`/`run_dpo` via
   `GRPOConfig`/`GRPOTrainer`. The dataset must contain a `prompt` column
   (ValueError naming the column contract otherwise). Reward functions come from
   `cfg.trainer.reward_funcs`: a list of dotted import paths

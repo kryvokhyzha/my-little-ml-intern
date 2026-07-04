@@ -65,7 +65,7 @@ training code, or working on the wandb backend.
 3. `tracking.group` (default null) clusters related runs on the dashboard — set
    it per sweep or autoresearch generation (e.g. `tracking.group=gen-2`);
    trackio groups natively, wandb receives it via `WANDB_RUN_GROUP`.
-4. That is the whole job. The adapters (`src/training/trl_adapter.py`,
+4. That is the whole job. The adapters (`src/training/trl/`,
    `src/training/lightning_adapter.py`) attach the `intern.callbacks` alert
    callbacks and set `report_to` from `cfg.tracking.backend` automatically. Do
    not add `trackio.init()`/`wandb.init()` calls to experiment scripts.

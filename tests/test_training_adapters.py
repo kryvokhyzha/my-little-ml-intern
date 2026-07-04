@@ -6,18 +6,16 @@ import yaml
 from datasets import Dataset
 from omegaconf import OmegaConf
 
+from data.loading import require_prompt_column as _require_prompt_column
 from training import axolotl_adapter
 from training.lightning_adapter import TrackioLightningLogger, _build_logger
-from training.trl_adapter import (
-    _apply_smoke,
-    _apply_tracking_group,
-    _build_args,
-    _grpo_reward_funcs,
-    _report_to,
-    _require_prompt_column,
-    _resolve_reward_funcs,
-    _smoke_enabled,
-)
+from training.runtime import apply_tracking_group as _apply_tracking_group
+from training.runtime import smoke_enabled as _smoke_enabled
+from training.trl.config import apply_smoke as _apply_smoke
+from training.trl.config import build_args as _build_args
+from training.trl.config import report_to as _report_to
+from training.trl.rewards import grpo_reward_funcs as _grpo_reward_funcs
+from training.trl.rewards import resolve_reward_funcs as _resolve_reward_funcs
 
 
 @pytest.fixture

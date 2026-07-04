@@ -1,4 +1,4 @@
-"""Deterministic tiny text corpus for smoke experiments — no network needed."""
+"""Deterministic synthetic corpora for smoke experiments — no network needed."""
 
 from __future__ import annotations
 

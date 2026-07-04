@@ -15,8 +15,8 @@ load_dotenv(find_dotenv(), override=True)
 
 from pathlib import Path
 
-from training.toy_data import build_tiny_text_dataset
-from training.trl_adapter import run_sft
+from data.synthetic import build_tiny_text_dataset
+from training.trl import run_sft
 
 
 @hydra.main(version_base=None, config_path="../../configs", config_name="001-tiny-sft-smoke")

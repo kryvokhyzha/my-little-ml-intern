@@ -53,9 +53,10 @@ The full contract (module APIs, artifact formats, skill conventions) lives in
 configs/        # Hydra configs: main.yaml + groups (hydra/, trainer/, tracking/, compute/, budget/)
 scripts/        # python/ (incl. intern.py CLI) and bash/ (notify.sh, gpu_probe.sh)
 src/            # Importable package code
-  helper/       # display/ (rich) and logging/ (LoggerConfig singleton)
-  intern/       # enforcement library: verify, budget, ledger, callbacks, deps
-  training/     # trl_adapter, lightning_adapter, axolotl_adapter
+  helper/       # display/ (rich) and logging/ (LoggerConfig singleton) — template-generic
+  data/         # loading.py (split loading) + synthetic.py (smoke fixtures)
+  intern/       # enforcement library: verify, budget, ledger, callbacks, deps, traces
+  training/     # runtime/models/sampling shared; trl/ subpackage, lightning_adapter, axolotl_adapter
 experiments/    # NNN-<slug>/ run artifacts (task/plan/budget/ledger/verify/results)
 docs/           # Plans, analyses, design notes (see "Docs conventions")
 tests/          # pytest suite for src/
@@ -255,6 +256,7 @@ Project-level skills under `.claude/skills/` (auto-discoverable):
 | Skill                        | Use when                                                                                   |
 | ---------------------------- | ------------------------------------------------------------------------------------------ |
 | `autoresearch-loop`          | Generational orchestrator that runs many bounded training experiments to find the best…    |
+| `distill-traces`             | Turn verified agent traces into training data and run the self-distillation loop — define… |
 | `literature-recipe-research` | Isolated-context literature research that returns a ranked table of training recipes with… |
 | `new-doc`                    | Create a new numbered document in docs/ following the NNN-kebab-case-title.md convention   |
 | `new-experiment`             | Scaffold the numbered experiment triple for a training run — entrypoint…                   |

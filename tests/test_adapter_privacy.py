@@ -4,7 +4,9 @@ import pytest
 from omegaconf import OmegaConf
 
 from training.lightning_adapter import TrackioLightningLogger
-from training.trl_adapter import _build_args, _is_main_process, _load_model
+from training.models import load_model as _load_model
+from training.runtime import is_main_process as _is_main_process
+from training.trl.config import build_args as _build_args
 
 
 @pytest.fixture

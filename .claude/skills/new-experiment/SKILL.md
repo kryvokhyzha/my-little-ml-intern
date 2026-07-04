@@ -119,13 +119,17 @@ def main(cfg: DictConfig) -> None:
     logger.info("Starting NNN-<slug> with config:\n{}", cfg)
     kind = cfg.trainer.kind
     if kind == "trl_sft":
-        from training.trl_adapter import run_sft
+        from training.trl import run_sft
 
         run_sft(cfg)
     elif kind == "trl_dpo":
-        from training.trl_adapter import run_dpo
+        from training.trl import run_dpo
 
         run_dpo(cfg)
+    elif kind == "trl_grpo":
+        from training.trl import run_grpo
+
+        run_grpo(cfg)
     elif kind == "lightning":
         from training.lightning_adapter import run
 

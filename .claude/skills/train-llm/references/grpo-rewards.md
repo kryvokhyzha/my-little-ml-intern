@@ -12,7 +12,7 @@ task definition. Read this before writing any reward function for a
 - TRL calls each function with the batch (prompts, completions, plus extra
   dataset columns as kwargs) and expects one float per completion.
 - **Floor-reward rule:** every reward function must tolerate malformed
-  completions — unparseable JSON, empty strings, truncated output — by returning
+  completions — unparsable JSON, empty strings, truncated output — by returning
   the floor reward (its minimum score), never by raising. One raised exception
   kills the whole run mid-group.
 

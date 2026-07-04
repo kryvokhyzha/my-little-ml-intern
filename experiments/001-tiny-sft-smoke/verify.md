@@ -8,3 +8,4 @@ VERDICT: reward_margin = SKIP | value=n/a | threshold=> 0 | no DPO reward metric
 VERDICT: kl_ref = SKIP | value=n/a | threshold=finite and > 0 | no KL metrics logged
 VERDICT: reward_variance = SKIP | value=n/a | threshold=std > 0 | no GRPO reward metrics logged
 OVERALL: PASS (5 passed, 0 failed, 4 skipped)
+JUDGMENT: generation_quality = PASS | continuations are coherent template-style English matching the toy training distribution
