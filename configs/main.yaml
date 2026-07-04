@@ -1,0 +1,9 @@
+defaults:
+  - _self_
+  - hydra: default
+
+seed: 42
+project_name: my-little-ml-intern
+experiment_name: null
+experiment_dir: ${oc.env:PROJECT_ROOT,.}/experiments/${experiment_name}
+smoke_test: false

@@ -1,0 +1,12 @@
+# LoRA-without-regret recipe: all-linear targets, SFT r=256/alpha=16, lr=10x full-FT; keep effective batch < 32 (default 2x8=16 is fine).
+defaults:
+  - trl_sft
+
+peft:
+  r: 256
+  lora_alpha: 16
+  lora_dropout: 0.0
+  target_modules: all-linear
+
+args:
+  learning_rate: 2.0e-4

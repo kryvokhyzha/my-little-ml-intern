@@ -1,0 +1,14 @@
+kind: ssh
+host: null
+user: null
+port: 22
+identity_file: null
+ssh_opts: "-o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+remote_dir: null
+gpus: 1
+sync_paths:
+  - src
+  - configs
+  - scripts
+  - pyproject.toml
+  - uv.lock

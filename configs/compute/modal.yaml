@@ -1,0 +1,3 @@
+kind: modal
+gpu: A10G
+timeout_s: 10800

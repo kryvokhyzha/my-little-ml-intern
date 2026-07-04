@@ -1,0 +1,10 @@
+backend: trackio
+project: ${project_name}
+run_name: ${experiment_name}
+space_id: null
+# trackio Spaces are created PUBLIC unless forced private; this repo forces private.
+private: true
+# Clusters related runs on the dashboard; trackio honors it on the lightning lane only
+# (the TRL lane's TrackioCallback cannot forward it — use tracking=wandb for grouped TRL sweeps).
+group: null
+alerts: true

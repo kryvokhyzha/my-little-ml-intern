@@ -1,0 +1,7 @@
+backend: wandb
+project: ${project_name}
+run_name: ${experiment_name}
+entity: null
+# Clusters related runs on the dashboard; maps to the WANDB_RUN_GROUP env var.
+group: null
+alerts: true

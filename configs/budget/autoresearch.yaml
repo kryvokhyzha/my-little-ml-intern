@@ -1,0 +1,5 @@
+max_paths: 10
+max_retries_per_path: 1
+compute_cap_gpu_h: 8.0
+scale_ceiling_params: 200000000
+token_budget: null

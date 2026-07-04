@@ -1,0 +1,29 @@
+kind: trl_grpo
+model_name: null
+dtype: float32
+sample_prompts: null
+dataset: null
+dataset_split: train
+eval_split: null
+target_params: null
+planned_tokens: null
+peft: null
+quantization: null
+# Dotted import paths ('package.module:function') resolved via importlib at run time;
+# each callable must tolerate malformed completions (return the floor reward, never raise).
+reward_funcs: []
+args:
+  output_dir: ${experiment_dir}/ckpts
+  max_steps: -1
+  num_train_epochs: 1
+  num_generations: 4
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  max_completion_length: 256
+  learning_rate: 1.0e-6
+  beta: 0.0
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

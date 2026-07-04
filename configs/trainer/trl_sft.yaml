@@ -1,0 +1,25 @@
+kind: trl_sft
+model_name: null
+dtype: float32
+sample_prompts: null
+dataset: null
+dataset_split: train
+eval_split: null
+target_params: null
+planned_tokens: null
+peft: null
+quantization: null
+args:
+  output_dir: ${experiment_dir}/ckpts
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 2.0e-5
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.03
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

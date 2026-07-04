@@ -1,0 +1,24 @@
+name: deps-age
+
+# Weekly dependency-age gate. A red run IS the notification — no issue automation.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deps-age:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.13"
+          cache-dependency-glob: uv.lock
+      - run: uv sync --frozen --all-extras --no-install-project
+      - run: uv run --no-sync python scripts/python/intern.py deps

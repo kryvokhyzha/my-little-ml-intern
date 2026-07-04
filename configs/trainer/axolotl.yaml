@@ -1,0 +1,4 @@
+kind: axolotl
+base_config: null
+rendered_path: ${experiment_dir}/axolotl.yaml
+overrides: {}

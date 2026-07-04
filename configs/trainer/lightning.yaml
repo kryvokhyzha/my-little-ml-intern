@@ -1,0 +1,14 @@
+kind: lightning
+module: null
+datamodule: null
+target_params: null
+planned_tokens: null
+args:
+  max_steps: 1000
+  accelerator: auto
+  devices: auto
+  precision: 32-true
+  log_every_n_steps: 1
+  val_check_interval: 50
+  gradient_clip_val: 1.0
+  default_root_dir: ${experiment_dir}/ckpts

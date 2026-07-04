@@ -1,0 +1,78 @@
+default_language_version:
+  python: python3.13
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: check-executables-have-shebangs
+      - id: check-docstring-first
+      - id: detect-private-key
+      - id: debug-statements
+      - id: check-case-conflict
+      - id: mixed-line-ending
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.4.1
+    hooks:
+      - id: codespell
+        types_or: [python, markdown]
+        additional_dependencies: [tomli]
+
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v3.0.3
+    hooks:
+      - id: prettier
+        types_or: [markdown, yaml, toml, json, dockerfile, shell]
+        additional_dependencies: ["prettier@3.0.3", "prettier-plugin-sh@0.13.1"]
+        args: [--print-width=80, --prose-wrap=always]
+        # experiments/ artifacts (budget.md, ledger.md, verify.md, metrics.jsonl) are
+        # machine-parsed; prose-wrap would corrupt them.
+        exclude: "^(README\\.md|experiments/)"
+
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.9.1
+    hooks:
+      - id: nbqa-ruff
+        additional_dependencies: [ruff==0.11.4]
+        args: ["--fix", "--show-files"]
+      - id: nbqa-ruff-format
+        additional_dependencies: [ruff==0.11.4]
+
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.2
+    hooks:
+      - id: nbstripout
+        files: ".ipynb"
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.9.2
+    hooks:
+      - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: deps-age
+        name: deps age gate (latest but >=1 week old)
+        entry: uv run python scripts/python/intern.py deps
+        language: system
+        files: ^pyproject\.toml$
+        pass_filenames: false
+      - id: agents-skills-table
+        name: AGENTS.md skills table in sync
+        entry: uv run python scripts/python/sync_agents_md.py --check
+        language: system
+        files: "^(AGENTS\\.md|\\.claude/skills/.*)$"
+        pass_filenames: false

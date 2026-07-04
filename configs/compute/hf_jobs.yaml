@@ -1,0 +1,6 @@
+kind: hf_jobs
+flavor: a10g-small
+timeout: 3h
+# Jobs pushing to Hub must set hub_private_repo=True (see train-llm compute-lanes).
+secrets:
+  - HF_TOKEN

@@ -1,0 +1,25 @@
+kind: trl_dpo
+model_name: null
+dtype: float32
+sample_prompts: null
+ref_model_name: null
+dataset: null
+dataset_split: train
+eval_split: null
+target_params: null
+planned_tokens: null
+peft: null
+quantization: null
+args:
+  output_dir: ${experiment_dir}/ckpts
+  beta: 0.1
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 1
+  gradient_accumulation_steps: 16
+  learning_rate: 5.0e-7
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

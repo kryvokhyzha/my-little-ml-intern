@@ -1,0 +1,4 @@
+kind: vast
+gpu_name: RTX_4090
+num_gpus: 1
+max_price_per_hour: 0.8

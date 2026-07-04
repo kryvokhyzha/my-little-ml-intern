@@ -1,0 +1,27 @@
+# @package _global_
+defaults:
+  - main
+  - trainer: trl_sft
+  - tracking: none
+  - compute: local
+  - budget: default
+  - _self_
+
+experiment_name: 001-tiny-sft-smoke
+
+trainer:
+  model_name: HuggingFaceTB/SmolLM2-135M
+  dataset: ${experiment_dir}/data
+  target_params: 135000000
+  planned_tokens: 5000
+  sample_prompts:
+    - "Once upon a time"
+    - "The small dog walked to"
+    - "The little bird sat near"
+  args:
+    max_steps: 10
+    per_device_train_batch_size: 8
+    gradient_accumulation_steps: 1
+    learning_rate: 5.0e-5
+    save_strategy: "no"
+    use_cpu: true
