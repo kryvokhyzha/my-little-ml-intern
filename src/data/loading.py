@@ -43,7 +43,9 @@ def validate_columns(dataset: Any, task: str, split: str, text_field: str = "tex
     Contracts (TRL dataset formats): SFT accepts ``text``/``text_field``,
     ``prompt``+``completion``, or ``messages``; DPO requires ``chosen``+``rejected``
     (``prompt`` optional — the implicit-prompt preference format is valid); GRPO
-    requires ``prompt``. Unknown tasks are not checked.
+    requires ``prompt``. Unknown tasks are not checked. Extra columns are always
+    allowed — e.g. tool-calling SFT ships ``messages`` + ``tools``, and TRL forwards
+    ``tools`` to the chat template.
 
     Raises:
         ValueError: When the dataset lacks every accepted column set for the task.

@@ -27,6 +27,21 @@ def apply_smoke(args_dict: dict[str, Any], dataset: Dataset | None, smoke: bool)
     return args_dict, dataset
 
 
+def _resolve_bf16(d: dict[str, Any]) -> None:
+    """Pin bf16=False where TRL's default would crash; never touch an explicit choice.
+
+    TRL >= 1.7 defaults bf16 to True whenever fp16 is unset, regardless of hardware,
+    and transformers then rejects bf16 on machines without support (CPU-only boxes,
+    pre-Ampere GPUs). Uses transformers' own capability predicate so the resolution
+    can never disagree with their validator. Capable hardware is left to TRL.
+    """
+    if d.get("bf16") is None and not d.get("fp16") and not d.get("use_cpu"):
+        from transformers.utils import is_torch_bf16_gpu_available
+
+        if not is_torch_bf16_gpu_available():
+            d["bf16"] = False
+
+
 def build_args(cfg: DictConfig, cls: type, **overrides: Any) -> Any:
     d: dict[str, Any] = OmegaConf.to_container(cfg.trainer.args, resolve=True)
     d["report_to"] = report_to(OmegaConf.select(cfg, "tracking.backend"))
@@ -43,6 +58,7 @@ def build_args(cfg: DictConfig, cls: type, **overrides: Any) -> Any:
     d["logging_nan_inf_filter"] = False
     d.setdefault("disable_tqdm", not is_interactive())
     d.update(overrides)
+    _resolve_bf16(d)
     return cls(**d)
 
 

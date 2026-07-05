@@ -111,6 +111,23 @@ class TestBuildArgs:
         args = _build_args(cfg, SFTConfig)
         assert args.report_to == []
 
+    def test_bf16_pinned_false_on_incapable_hardware(self, cfg, monkeypatch):
+        # TRL >=1.7 defaults bf16=True when fp16 is unset; on a CPU-only box (the CI
+        # runner) transformers then rejects it. The adapter must pin bf16=False there.
+        import transformers.utils
+        from trl import SFTConfig
+
+        monkeypatch.setattr(transformers.utils, "is_torch_bf16_gpu_available", lambda: False)
+        args = _build_args(cfg, SFTConfig)
+        assert args.bf16 is False
+
+    def test_explicit_bf16_false_survives(self, cfg):
+        from trl import SFTConfig
+
+        cfg.trainer.args.bf16 = False
+        args = _build_args(cfg, SFTConfig)
+        assert args.bf16 is False
+
 
 class FakeMetricsLog:
     def __init__(self):
@@ -200,6 +217,10 @@ class TestValidateColumns:
 
     def test_sft_honors_custom_text_field(self):
         _validate_columns(Dataset.from_dict({"body": ["x"]}), "trl_sft", "train", text_field="body")
+
+    def test_sft_allows_extra_columns_like_tools(self):
+        # Tool-calling SFT: messages + tools schemas; TRL forwards `tools` to the chat template.
+        _validate_columns(Dataset.from_dict({"messages": [[]], "tools": [[]]}), "trl_sft", "train")
 
     def test_sft_rejects_unusable_columns(self):
         with pytest.raises(ValueError, match="trl_sft train"):
