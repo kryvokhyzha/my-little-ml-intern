@@ -2,8 +2,11 @@ from pathlib import Path
 
 import pytest
 
-from intern.budget import Budget, BudgetGate, load_budget, save_budget
+from intern.budget import Budget, BudgetGate, load_budget, load_budget_profile, save_budget
 from intern.ledger import Ledger
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 CONTRACT_BUDGET = """# Budget
@@ -177,3 +180,62 @@ def test_can_launch_scale_ceiling(tmp_path: Path) -> None:
     assert "scale_ceiling_params" in reason
     allowed, _ = gate.can_launch_path(params=135_000_000)
     assert allowed
+
+
+def _write_profile(tmp_path: Path, name: str, body: str) -> Path:
+    budget_dir = tmp_path / "budget"
+    budget_dir.mkdir(exist_ok=True)
+    (budget_dir / f"{name}.yaml").write_text(body, encoding="utf-8")
+    return tmp_path
+
+
+def test_load_budget_profile_zeroes_spend(tmp_path: Path) -> None:
+    configs = _write_profile(
+        tmp_path,
+        "lora",
+        "max_paths: 2\nmax_retries_per_path: 2\ncompute_cap_gpu_h: 4.0\n"
+        "scale_ceiling_params: 12000000000\ntoken_budget: null\n",
+    )
+    assert load_budget_profile(configs, "lora") == Budget(
+        max_paths=2,
+        max_retries_per_path=2,
+        compute_cap_gpu_h=4.0,
+        scale_ceiling_params=12_000_000_000,
+        token_budget=None,
+        paths_launched=0,
+        retries_used=0,
+        gpu_h_used=0.0,
+    )
+
+
+def test_load_budget_profile_token_budget_int(tmp_path: Path) -> None:
+    configs = _write_profile(
+        tmp_path,
+        "tok",
+        "max_paths: 1\nmax_retries_per_path: 1\ncompute_cap_gpu_h: 0.5\n"
+        "scale_ceiling_params: 200000000\ntoken_budget: 5000000\n",
+    )
+    assert load_budget_profile(configs, "tok").token_budget == 5_000_000
+
+
+def test_load_budget_profile_missing_file_raises(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        load_budget_profile(tmp_path, "nope")
+
+
+def test_load_budget_profile_missing_key_raises(tmp_path: Path) -> None:
+    configs = _write_profile(tmp_path, "bad", "max_paths: 2\n")
+    with pytest.raises(ValueError, match="missing keys"):
+        load_budget_profile(configs, "bad")
+
+
+def test_shipped_budget_profiles_all_parse() -> None:
+    names = sorted(path.stem for path in (REPO_ROOT / "configs" / "budget").glob("*.yaml"))
+    assert names, "budget profile catalog is empty"
+    for name in names:
+        profile = load_budget_profile(REPO_ROOT / "configs", name)
+        assert profile.max_paths >= 1
+        assert profile.max_retries_per_path >= 1
+        assert profile.compute_cap_gpu_h > 0
+        assert profile.scale_ceiling_params > 0
+        assert (profile.paths_launched, profile.retries_used, profile.gpu_h_used) == (0, 0, 0.0)

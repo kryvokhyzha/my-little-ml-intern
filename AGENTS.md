@@ -270,6 +270,32 @@ Project-level skills under `.claude/skills/` (auto-discoverable):
 
 Invoke via `Skill` (or `/name`) when the request matches.
 
+## Engineering discipline
+
+Behavioral rules that reduce common agent coding mistakes.
+They bias toward caution over speed — for trivial tasks, use judgment.
+
+- **Think before coding.** State assumptions explicitly; if multiple
+  interpretations exist, present them — never pick one silently. Research first
+  (never ask what the repo can answer), but when something is still unclear
+  after looking: stop, name what's confusing, and ask (interactive) — or record
+  the assumption and fire `notify.sh approval_required` (headless). Never guess
+  silently.
+- **Simplicity first.** Minimum code that solves the problem: no features beyond
+  what was asked, no abstractions for single-use code, no speculative
+  configurability, no error handling for impossible scenarios. Infrastructure
+  earns its place by being used. Test: "would a senior engineer call this
+  overcomplicated?" — if yes, simplify.
+- **Surgical changes.** Every changed line traces to the request. Don't
+  "improve" adjacent code, comments, or formatting; don't refactor what isn't
+  broken. Remove imports/variables your own change orphaned; mention
+  pre-existing dead code, don't delete it unasked.
+- **Verifiable goals.** Turn the task into a checkable criterion before coding:
+  "fix the bug" → a test that reproduces it, then passes; "add validation" →
+  tests for the invalid inputs, then make them pass. Experiments already enforce
+  this (`mechanism` / `expected_delta` / `falsification` in plan.md); for code
+  changes, see "Finishing a task" below.
+
 ## Finishing a task (verify before reporting done)
 
 Always run an appropriate verification before declaring a task complete — don't

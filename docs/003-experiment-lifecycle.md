@@ -89,15 +89,16 @@ VERDICT: TRAIN_OK | final_train_loss=3.6047
 ```
 
 `VERDICT: TRAIN_FAIL | <cause>` → fix the cause and re-smoke. Launching a long
-run on a failed or skipped smoke is a workflow violation. In 001's
-[metrics.jsonl](../experiments/000-tiny-sft-smoke/metrics.jsonl) you can see the
-smoke run (`"smoke": true` at 15:17:50) eleven seconds before the real run
+run on a failed or skipped smoke is a workflow violation. In the smoke's
+`metrics.jsonl` (gitignored — it regenerates on every run) you can see the smoke
+run (`"smoke": true` at 15:17:50) eleven seconds before the real run
 (`"smoke": false` at 15:18:01).
 
 ## 5. The real run and metrics.jsonl anatomy
 
 The adapter streams everything into the experiment's append-only
-`metrics.jsonl`. Real lines from 001 (timestamps shortened):
+`metrics.jsonl`. Real lines from the `000-tiny-sft-smoke` run (timestamps
+shortened):
 
 ```text
 {"ts": "...T15:18:01+00:00", "event": "run_start", "task": "trl_sft", "run_name": null, "smoke": false}

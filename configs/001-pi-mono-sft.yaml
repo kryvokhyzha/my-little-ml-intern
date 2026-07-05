@@ -6,7 +6,7 @@ defaults:
   - trainer: trl_sft_lora
   - tracking: trackio
   - compute: local
-  - budget: default
+  - budget: lora
   - _self_
 
 experiment_name: 001-pi-mono-sft

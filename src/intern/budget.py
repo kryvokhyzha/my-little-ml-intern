@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 _LINE_RE = re.compile(r"^(?P<key>\w+):\s*(?P<value>.*?)\s*$")
 _INT_FIELDS = ("max_paths", "max_retries_per_path", "scale_ceiling_params", "paths_launched", "retries_used")
 _FLOAT_FIELDS = ("compute_cap_gpu_h", "gpu_h_used")
+_CAP_FIELDS = ("max_paths", "max_retries_per_path", "compute_cap_gpu_h", "scale_ceiling_params", "token_budget")
 
 
 @dataclass
@@ -61,6 +62,41 @@ def load_budget(path: Path | str) -> Budget:
         )
     except (TypeError, ValueError) as err:
         raise ValueError(f"budget file {path} has an unparsable value: {err}") from err
+
+
+def load_budget_profile(configs_dir: Path | str, profile: str) -> Budget:
+    """Build a fresh Budget (spend zeroed) from ``configs/budget/<profile>.yaml``.
+
+    The profile files hold only cap fields; the returned Budget carries the caps
+    with all spend counters at zero — ready to seed a new experiment's budget.md.
+
+    Raises:
+        FileNotFoundError: When the profile file does not exist.
+        ValueError: When the profile is not a mapping or misses a cap field.
+
+    """
+    from omegaconf import OmegaConf
+
+    path = Path(configs_dir) / "budget" / f"{profile}.yaml"
+    if not path.is_file():
+        raise FileNotFoundError(f"budget profile not found: {path}")
+    data = OmegaConf.to_container(OmegaConf.load(path), resolve=True)
+    if not isinstance(data, dict):
+        raise ValueError(f"budget profile {path} is not a mapping")
+    missing = sorted(field for field in _CAP_FIELDS if field not in data)
+    if missing:
+        raise ValueError(f"budget profile {path} is missing keys: {', '.join(missing)}")
+    try:
+        token = data["token_budget"]
+        return Budget(
+            max_paths=int(data["max_paths"]),
+            max_retries_per_path=int(data["max_retries_per_path"]),
+            compute_cap_gpu_h=float(data["compute_cap_gpu_h"]),
+            scale_ceiling_params=int(data["scale_ceiling_params"]),
+            token_budget=None if token is None else int(token),
+        )
+    except (TypeError, ValueError) as err:
+        raise ValueError(f"budget profile {path} has an unparsable value: {err}") from err
 
 
 def save_budget(budget: Budget, path: Path | str) -> None:

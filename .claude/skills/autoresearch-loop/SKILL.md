@@ -85,9 +85,10 @@ irrelevant choices waste as much compute as sloppy ablations):
   observed run-to-run noise = unfalsifiable: score 0, never spend compute on it.
 
 In-context self-critique by default; when subagents are available, spawn 2-3
-parallel critics and average their scores. Drop everything below 6 — dropped
-hypotheses never reach the paths table and cost no budget. Record the drop and
-the score in plan.md.
+parallel read-only critics (this rubric verbatim in each prompt, plus the
+experiment directory) and average their scores. Drop everything below 6 —
+dropped hypotheses never reach the paths table and cost no budget. Record the
+drop and the score in plan.md.
 
 ### 3. EXECUTE
 

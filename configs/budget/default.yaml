@@ -1,3 +1,5 @@
+# Generic small-scale run (the safe fallback). Pick a task-specific profile
+# (smoke / lora / sft / dpo / grpo / pretrain) when one fits.
 max_paths: 2
 max_retries_per_path: 2
 compute_cap_gpu_h: 2.0

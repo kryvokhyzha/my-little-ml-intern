@@ -1,0 +1,7 @@
+# From-scratch pretraining. Long single run, small model — one path, one retry,
+# the largest wall-clock ceiling in the catalog.
+max_paths: 1
+max_retries_per_path: 1
+compute_cap_gpu_h: 24.0
+scale_ceiling_params: 2000000000
+token_budget: null

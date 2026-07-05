@@ -1,0 +1,7 @@
+# LoRA / QLoRA fine-tune on a single GPU. QLoRA reaches multi-B bases, hence the
+# high param ceiling; wall-clock is modest (001: gemma-4-E2B, 200 steps, 2.58 GPU-h).
+max_paths: 2
+max_retries_per_path: 2
+compute_cap_gpu_h: 4.0
+scale_ceiling_params: 12000000000
+token_budget: null

@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 from data.pi_mono import (
     KNOWN_TOOL_SCHEMAS,
     records_to_examples,
@@ -192,7 +190,7 @@ def test_records_to_examples_drops_overlength(tmp_path):
     assert len(all_kept) == 2
 
 
-def test_records_to_examples_raises_on_prefix_mismatch(tmp_path):
+def test_records_to_examples_skips_prefix_mismatch(tmp_path):
     _write_session(tmp_path, "sess", _session_events())
     records = sessions_to_trace_records(tmp_path)
 
@@ -206,8 +204,8 @@ def test_records_to_examples_raises_on_prefix_mismatch(tmp_path):
         def __call__(self, text, add_special_tokens=False):
             return {"input_ids": text.split()}
 
-    with pytest.raises(ValueError, match="chat template"):
-        records_to_examples(records, RewritingTokenizer())
+    # One template-edge trace must not kill a bulk conversion: mismatches are skipped.
+    assert records_to_examples(records, RewritingTokenizer()) == []
 
 
 def test_split_examples_deterministic_datasetdict():

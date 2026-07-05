@@ -93,16 +93,21 @@ def _run_trl(
     run_with_stderr_tee(trainer.train, experiment_dir)
 
     if not smoke and main_process:
-        configured = OmegaConf.select(cfg, "data.sample_prompts")
-        prompts, pre_rendered = resolve_sample_prompts(configured, eval_dataset, train_dataset)
-        write_samples(
-            trainer.model,
-            tokenizer,
-            experiment_dir,
-            prompts=prompts,
-            pre_rendered=pre_rendered,
-            seed=int(OmegaConf.select(cfg, "seed") or 42),
-        )
+        # Training succeeded and the checkpoint is saved — a sampling failure (e.g. OOM on a
+        # long probe prompt) must not sink the run, so it degrades to a skipped samples.jsonl.
+        try:
+            configured = OmegaConf.select(cfg, "data.sample_prompts")
+            prompts, pre_rendered = resolve_sample_prompts(configured, eval_dataset, train_dataset)
+            write_samples(
+                trainer.model,
+                tokenizer,
+                experiment_dir,
+                prompts=prompts,
+                pre_rendered=pre_rendered,
+                seed=int(OmegaConf.select(cfg, "seed") or 42),
+            )
+        except Exception as exc:
+            logger.warning("Sample generation failed ({}) — training succeeded, samples skipped", exc)
 
     loss = final_train_loss(trainer)
     if main_process:

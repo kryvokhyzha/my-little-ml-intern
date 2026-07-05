@@ -6,6 +6,19 @@
 | Package    | [![Python](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/release/python-3130/)                                                                                                                       |
 | Meta       | [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) |
 
+> [!NOTE]
+> **This is a template / reference repository.** It ships one worked example
+> (`001-pi-mono-sft`) and a full set of gates so you can see the loop end-to-end,
+> then make it yours. Two ways to adopt it:
+>
+> - **Fork it** as the starting point for your own experiments — replace the
+>   `<!-- template: … -->` sections below, drop in your `configs/`, and go.
+> - **Vendor the pack** into an existing project — copy `.claude/skills/` and
+>   `src/intern/` (see [Vendoring into your project](#-vendoring-into-your-project)).
+>
+> Nothing here is specific to the example beyond `configs/`, `scripts/python/NNN-*.py`,
+> and `experiments/`. The skills and enforcement library are project-agnostic.
+
 ## 📖 About
 
 <!-- template: replace with your project description -->
@@ -17,15 +30,33 @@ A personal "ML intern" for working on ML/LLM projects with Claude Code (and othe
 - **Enforcement library** (`src/intern/`) — the guardrails are code, not prose: verification,
   budget, and dependency-age gates exit nonzero and block the workflow.
 - **Training lanes** (`src/training/`) — Hydra configs mapped onto TRL (SFT/DPO), PyTorch
-  Lightning, and axolotl (rendered YAML for remote GPU boxes).uto
+  Lightning, and axolotl (rendered YAML for remote GPU boxes).
 
 ## 🔁 The loop
 
-```
-new-experiment → plan (hypotheses) → budget gate → smoke → train → verify gate → results.md → publish gate
+The gates are the point: every transition below is enforced by an exit code, not
+by convention. Denials loop back — they don't wave you through.
+
+```mermaid
+flowchart TD
+    A([new-experiment]) --> B[plan: hypotheses + paths]
+    B --> C{budget gate}
+    C -->|exit 1 · caps hit| STOP([stop / ask a human])
+    C -->|allow| D[smoke: smoke_test=true]
+    D --> E{VERDICT?}
+    E -->|TRAIN_FAIL| F[fix the cause]
+    F --> D
+    E -->|TRAIN_OK| G[train the real run]
+    G --> H{verify gate}
+    H -->|exit ≠ 0| P[postmortem → retry]
+    P --> C
+    H -->|exit 0| R[results.md]
+    R --> S{publish gate}
+    S -->|refuse| STOP
+    S -->|verify + ledger pass| PUB[(HF · private)]
 ```
 
-Every arrow is enforced by an exit code, not by convention:
+Each gate, in words:
 
 - **budget gate** — `intern.py budget can-launch` exits 1 → no new path (caps on paths,
   retries, GPU-hours, parameter ceiling).

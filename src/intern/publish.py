@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -28,7 +29,6 @@ _SCRUB_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("slack-token", re.compile(r"xox[abp]-")),
     ("aws-access-key-id", re.compile(r"AKIA[0-9A-Z]{16}")),
     ("github-token", re.compile(r"ghp_[A-Za-z0-9]{20,}")),
-    ("home-dir-path", re.compile(r"/(?:Users|home)/[^/\s]+/")),
 )
 _SCRUB_SUFFIXES = frozenset({".md", ".jsonl", ".yaml"})
 
@@ -102,7 +102,12 @@ def _stage_bundle(experiment_dir: Path, staging: Path) -> Path:
 
 
 def _scrub_bundle(staged_dir: Path) -> list[str]:
-    """Return 'file: pattern-name' hits for token-shaped strings and home-dir paths; never the matched value."""
+    """Return 'file: pattern-name' hits for tokens and this machine's home path (never the value).
+
+    The home-dir check targets the CURRENT user's home (an environment leak), not any
+    ``/Users/x/`` — model generations legitimately echo training-data paths.
+    """
+    home = str(Path.home())
     hits: list[str] = []
     for path in sorted(staged_dir.rglob("*")):
         if not path.is_file() or path.suffix not in _SCRUB_SUFFIXES:
@@ -111,6 +116,8 @@ def _scrub_bundle(staged_dir: Path) -> list[str]:
         for pattern_name, pattern in _SCRUB_PATTERNS:
             if pattern.search(text):
                 hits.append(f"{path.relative_to(staged_dir)}: {pattern_name}")
+        if home and home in text:
+            hits.append(f"{path.relative_to(staged_dir)}: home-dir-path")
     return hits
 
 
@@ -150,15 +157,65 @@ def _first_code_block(lines: list[str]) -> str | None:
     return None
 
 
-def _model_card(results_md: str, experiment_name: str) -> str:
+def _adapter_frontmatter(model_dir: Path | None, repo_id: str | None) -> tuple[str, str] | None:
+    """(frontmatter, usage) for a PEFT adapter dir, or None when the model dir is a full model."""
+    if model_dir is None:
+        return None
+    config_path = model_dir / "adapter_config.json"
+    if not config_path.is_file():
+        return None
+    try:
+        base = json.loads(config_path.read_text(encoding="utf-8")).get("base_model_name_or_path")
+    except (OSError, ValueError):
+        base = None
+    if not base:
+        return None
+    frontmatter = "\n".join(
+        [
+            "---",
+            f"base_model: {base}",
+            "library_name: peft",
+            "tags:",
+            "- lora",
+            "- my-little-ml-intern",
+            "---",
+            "",
+        ]
+    )
+    target = repo_id or "<this-repo>"
+    usage = "\n".join(
+        [
+            "## Usage",
+            "",
+            "```python",
+            "from peft import PeftModel",
+            "from transformers import AutoModelForCausalLM",
+            "",
+            f'base = AutoModelForCausalLM.from_pretrained("{base}")',
+            f'model = PeftModel.from_pretrained(base, "{target}")',
+            "```",
+            "",
+        ]
+    )
+    return frontmatter, usage
+
+
+def _model_card(
+    results_md: str, experiment_name: str, model_dir: Path | None = None, repo_id: str | None = None
+) -> str:
     lines = results_md.splitlines()
     title = next((line.removeprefix("# ").strip() for line in lines if line.startswith("# ")), experiment_name)
     winner = _winner_paragraph(lines)
     table = _first_table(lines)
     commands = _first_code_block(lines)
-    parts = [f"# {title}", ""]
+    adapter = _adapter_frontmatter(model_dir, repo_id)
+
+    parts = [adapter[0]] if adapter else []
+    parts += [f"# {title}", ""]
     if winner:
         parts += [winner, ""]
+    if adapter:
+        parts += [adapter[1]]
     if table:
         parts += ["## Path comparison", "", table, ""]
     if commands:
@@ -225,7 +282,7 @@ def publish_run(experiment_dir: Path | str, repo_id: str | None = None, private:
         with tempfile.TemporaryDirectory() as tmp:
             staging = Path(tmp)
             bundle = _stage_bundle(experiment_dir, staging / "bundle")
-            card = _model_card(results_path.read_text(encoding="utf-8"), experiment_dir.name)
+            card = _model_card(results_path.read_text(encoding="utf-8"), experiment_dir.name, model_dir, repo_id)
             (staging / "README.md").write_text(card, encoding="utf-8")
 
             if os.environ.get("INTERN_SKIP_BUNDLE_SCRUB") == "1":

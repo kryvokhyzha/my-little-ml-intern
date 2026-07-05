@@ -185,6 +185,7 @@ experiments/*/ckpts/
 experiments/*/logs/
 experiments/*/data/
 experiments/*/traces/
+experiments/*/metrics.jsonl
 experiments/999-*/
 
 # Teamp scripts

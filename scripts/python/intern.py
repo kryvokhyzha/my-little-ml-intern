@@ -15,7 +15,7 @@ root = rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True
 sys.path.insert(0, str(root / "src"))
 load_dotenv(find_dotenv(), override=True)
 
-from intern.budget import BudgetGate
+from intern.budget import BudgetGate, load_budget, load_budget_profile, save_budget
 from intern.deps import check_project
 from intern.ledger import Ledger
 from intern.publish import publish_run
@@ -23,7 +23,7 @@ from intern.report import render_gates
 from intern.verify import verify_run
 
 
-_BUDGET_ACTIONS = ("status", "can-launch", "can-retry", "record-launch", "record-retry", "record-gpu-h")
+_BUDGET_ACTIONS = ("init", "status", "can-launch", "can-retry", "record-launch", "record-retry", "record-gpu-h")
 
 
 def _resolve_experiment(experiment: str | int, experiments_root: str | None) -> Path:
@@ -67,12 +67,70 @@ def verify(
     raise SystemExit(code)
 
 
+def _resolve_params(experiment_dir: Path) -> int | None:
+    """Compute the experiment model's true param count from HF metadata (no --params needed)."""
+    from intern.params import experiment_model_repo, hf_param_count
+
+    repo = experiment_model_repo(root / "configs", experiment_dir.name)
+    if repo is None:
+        logger.warning(
+            "Could not resolve the model repo from {} config — scale ceiling not enforced", experiment_dir.name
+        )
+        return None
+    count = hf_param_count(repo)
+    if count is None:
+        logger.warning("Could not read param count for '{}' from HF — scale ceiling not enforced", repo)
+    else:
+        logger.info("Resolved {} = {} params from HF safetensors metadata", repo, count)
+    return count
+
+
+def _budget_init(budget_path: Path, profile: str | None, force: bool) -> None:
+    """Seed budget.md from a profile; refuse to clobber recorded spend unless forced."""
+    if profile is None:
+        logger.error("budget init requires --profile (a name under configs/budget/, e.g. lora)")
+        raise SystemExit(2)
+    try:
+        seeded = load_budget_profile(root / "configs", str(profile))
+    except (FileNotFoundError, ValueError) as err:
+        logger.error("{}", err)
+        raise SystemExit(2) from None
+    if budget_path.is_file() and not force:
+        try:
+            existing = load_budget(budget_path)
+        except ValueError:
+            existing = None
+        if existing is not None and (existing.paths_launched or existing.retries_used or existing.gpu_h_used):
+            logger.error(
+                "Refusing to overwrite {} with recorded spend "
+                "(paths_launched={}, retries_used={}, gpu_h_used={}); pass --force to re-seed",
+                budget_path,
+                existing.paths_launched,
+                existing.retries_used,
+                existing.gpu_h_used,
+            )
+            raise SystemExit(1)
+    save_budget(seeded, budget_path)
+    logger.info(
+        "Seeded {} from profile '{}': {} paths, {} retries/path, {} GPU-h cap, {} param ceiling",
+        budget_path,
+        profile,
+        seeded.max_paths,
+        seeded.max_retries_per_path,
+        seeded.compute_cap_gpu_h,
+        seeded.scale_ceiling_params,
+    )
+    raise SystemExit(0)
+
+
 def budget(
     action: str,
     experiment: str | int,
     hours: float | None = None,
     path_id: str | None = None,
     params: int | None = None,
+    profile: str | None = None,
+    force: bool = False,
     experiments_root: str | None = None,
 ) -> None:
     if action not in _BUDGET_ACTIONS:
@@ -80,6 +138,8 @@ def budget(
         raise SystemExit(2)
     experiment_dir = _resolve_experiment(experiment, experiments_root)
     budget_path = experiment_dir / "budget.md"
+    if action == "init":
+        _budget_init(budget_path, profile, force)
     if not budget_path.is_file():
         logger.error("Missing {}", budget_path)
         raise SystemExit(2)
@@ -94,7 +154,8 @@ def budget(
             print(f"{key}: {value}")
         raise SystemExit(0)
     if action == "can-launch":
-        allowed, reason = gate.can_launch_path(params=int(params) if params is not None else None)
+        resolved = int(params) if params is not None else _resolve_params(experiment_dir)
+        allowed, reason = gate.can_launch_path(params=resolved)
         print(reason)
         raise SystemExit(0 if allowed else 1)
     if action == "can-retry":

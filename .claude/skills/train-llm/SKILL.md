@@ -49,8 +49,12 @@ Then the budget gate:
 uv run python scripts/python/intern.py budget --experiment NNN can-launch
 ```
 
-Pass `--params <model_param_count>` (the model's total parameters) — the gate
-then also enforces the `scale_ceiling_params` cap from budget.md.
+`can-launch` resolves the model's true parameter count from the config's
+`model:` group (HF safetensors metadata) and enforces the `scale_ceiling_params`
+cap automatically — pass `--params <count>` only to override it (e.g. an
+unpublished model). budget.md's caps come from its task-keyed profile
+(`smoke`/`lora`/`sft`/`dpo`/`grpo`/`pretrain`), so a denial means either this
+task needs a bigger-budget profile or the path is genuinely out of budget.
 
 Exit 0 = allowed. Nonzero = **stop** — do not launch, do not "just try one quick
 run". Report which cap is hit; caps never license quitting work already

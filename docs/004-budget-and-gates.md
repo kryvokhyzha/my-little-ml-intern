@@ -23,8 +23,11 @@ Caps cut both ways:
 ## budget.md anatomy
 
 Each experiment carries its own
-[budget.md](../experiments/000-tiny-sft-smoke/budget.md), scaffolded from a
-budget config group and parsed by `intern.budget`:
+[budget.md](../experiments/000-tiny-sft-smoke/budget.md), seeded from a
+**task-keyed** budget profile (`budget init`, below) and parsed by
+`intern.budget`. Caps depend on the task — a smoke needs minutes and 200M
+params; a GRPO run needs hours and multi-B params — so the profile you compose
+sets the ceiling:
 
 ```text
 # Budget
@@ -52,9 +55,11 @@ gpu_h_used: 0.0
   shaped.
 - `compute_cap_gpu_h` — hard GPU-hour ceiling, checked by both `can-launch` and
   `can-retry` once `gpu_h_used` reaches it.
-- `scale_ceiling_params` — model-size ceiling, enforced only when you pass
-  `--params` to `can-launch` (so pass it whenever the path has a parameter
-  target).
+- `scale_ceiling_params` — model-size ceiling. `can-launch` resolves the model's
+  true parameter count automatically from the config's `model:` group (HF
+  safetensors metadata) and denies when it exceeds the ceiling; pass
+  `--params N` to override the resolved value. If the count can't be resolved
+  (offline, no metadata), the ceiling is skipped with a warning.
 - `token_budget` — advisory for the orchestrating agent (LLM-token spend), not
   machine-enforced; `null` is fine.
 
@@ -70,9 +75,9 @@ uv run python scripts/python/intern.py budget --experiment NNN record-gpu-h --ho
 
 Never by hand. The tally is the audit trail — its whole value is that every
 number in it corresponds to a `record-*` call at a known point in the lifecycle.
-001's tally showing `retries_used: 5` against a 2×2 backstop is an honest record
-of a supervised pipeline shakedown outrunning its defaults; a hand-edited tally
-can show anything, which is to say nothing.
+The `000-tiny-sft-smoke` fixture's tally showing `retries_used: 5` against a 2×2
+backstop is an honest record of a supervised pipeline shakedown outrunning its
+defaults; a hand-edited tally can show anything, which is to say nothing.
 
 ## Gate commands and exit codes
 
@@ -81,6 +86,7 @@ artifacts.** These exits are the blocking mechanism — skills must stop on
 nonzero.
 
 ```bash
+uv run python scripts/python/intern.py budget --experiment NNN init --profile lora [--force]
 uv run python scripts/python/intern.py budget --experiment NNN status
 uv run python scripts/python/intern.py budget --experiment NNN can-launch [--params N]
 uv run python scripts/python/intern.py budget --experiment NNN can-retry --path-id path-1
@@ -95,6 +101,7 @@ uv run python scripts/python/intern.py deps [--min-age-days 7]
 
 | command              | exit 0            | exit 1                   | exit 2                                              |
 | -------------------- | ----------------- | ------------------------ | --------------------------------------------------- |
+| `budget init`        | budget.md seeded  | refused: existing spend  | unknown/missing `--profile`, unparsable profile     |
 | `budget status`      | tally printed     | —                        | experiment/budget.md missing or unparsable          |
 | `budget can-launch`  | launch allowed    | denied (reason printed)  | missing artifacts                                   |
 | `budget can-retry`   | retry allowed     | denied (reason printed)  | missing `--path-id` or ledger.md                    |
@@ -170,23 +177,38 @@ managed by `intern.ledger` — one row per path, columns exactly:
 - No row may be left `running` when the experiment ends; a path that finished
   but failed verify is `failed`/`fail` with a `failure_cause`, not deleted.
 
-## Budget group variants
+## Budget profiles (task-keyed)
 
-Experiment configs compose a budget group; `new-experiment` copies the group's
-values into the experiment's budget.md at scaffold time (budget.md is the
-enforced artifact from then on).
+The caps a run needs depend on the task, so budgets live as a catalog of
+profiles under [configs/budget/](../configs/budget/). Compose the matching one
+in the experiment config (`budget: <name>`) and seed the enforced budget.md from
+it:
 
-- [configs/budget/default.yaml](../configs/budget/default.yaml) — 2 paths, 2
-  retries per path, 2.0 GPU-h, 200M-param ceiling. Sized for a single-hypothesis
-  experiment with a plan-B.
-- [configs/budget/autoresearch.yaml](../configs/budget/autoresearch.yaml) — 10
-  paths, 1 retry per path, 8.0 GPU-h, same param ceiling. Sized for the
-  autoresearch loop's generational sweeps: many cheap hypotheses, little
-  patience per hypothesis. Compose with `budget: autoresearch` in the experiment
-  config.
+```bash
+uv run python scripts/python/intern.py budget --experiment NNN init --profile <name>
+```
 
-Pick the group at scaffold time; changing budgets mid-experiment is a cap edit
-(see FAQ), not a group swap.
+`init` writes the profile's caps with all spend at zero and **refuses to
+overwrite a budget.md that already has recorded spend** (pass `--force` to
+re-seed deliberately). This is the one supported way to create budget.md — it
+keeps the profile and the enforced artifact from drifting, which hand-copying
+numbers does not.
+
+| profile        | paths × retries | GPU-h | param ceiling | sized for                                 |
+| -------------- | --------------- | ----: | ------------: | ----------------------------------------- |
+| `smoke`        | 1 × 1           |  0.25 |          200M | plumbing / tiny-model smoke checks        |
+| `default`      | 2 × 2           |   2.0 |          200M | generic small run (safe fallback)         |
+| `lora`         | 2 × 2           |   4.0 |           12B | LoRA / QLoRA on a single GPU (001)        |
+| `sft`          | 2 × 2           |   6.0 |            3B | full-parameter SFT (memory-bound)         |
+| `dpo`          | 2 × 2           |   8.0 |           12B | preference tuning (ref model doubles fwd) |
+| `grpo`         | 3 × 1           |  12.0 |           12B | online RL / GRPO (rollout-bound)          |
+| `pretrain`     | 1 × 1           |  24.0 |            2B | from-scratch pretraining                  |
+| `autoresearch` | 10 × 1          |   8.0 |          200M | autoresearch-loop generational sweeps     |
+
+Need caps between profiles? Add a new `configs/budget/<name>.yaml` (five cap
+keys) rather than hand-editing budget.md — the profile stays the source of
+truth. Pick the profile at scaffold time; changing budgets mid-experiment is a
+cap edit (see FAQ) or a deliberate `init --force`, not a silent hand-edit.
 
 ## FAQ
 
@@ -200,12 +222,13 @@ and stop that path. If every path is exhausted, that's `notify.sh error` — the
 experiment ends with results honestly reported as not achieved, never
 `train_done`.
 
-**Can I edit budget.md by hand?** Caps: yes — before the run they gate, as a
+**Can I edit budget.md by hand?** Caps: prefer `init --force` with a fitting
+profile, but a one-off cap edit is legitimate before the run they gate, as a
 deliberate human decision (raising `max_retries_per_path` because retries so far
-were pipeline bugs, not method failures, is a legitimate call — 001 effectively
-lived this). Spent: **never**. The `## Spent` lines are written only by
-`record-launch` / `record-retry` / `record-gpu-h`; a hand-edited tally destroys
-the audit trail the whole gate rests on.
+were pipeline bugs, not method failures — the `000-tiny-sft-smoke` fixture
+effectively lived this). Spent: **never**. The `## Spent` lines are written only
+by `record-launch` / `record-retry` / `record-gpu-h`; a hand-edited tally
+destroys the audit trail the whole gate rests on.
 
 **What does exit 2 mean?** "You asked the question wrong, or the artifacts
 aren't there" — wrong experiment number, missing budget.md/ledger.md, a

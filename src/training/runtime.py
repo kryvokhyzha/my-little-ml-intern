@@ -39,12 +39,15 @@ class StderrTee(io.TextIOBase):
 
     def write(self, s: str) -> int:
         sys.__stderr__.write(s)
-        self._fh.write(s)
+        if not self._fh.closed:
+            self._fh.write(s)
         return len(s)
 
     def flush(self) -> None:
         sys.__stderr__.flush()
-        self._fh.flush()
+        # A logging handler may hold this tee past the file's close and flush it at GC time.
+        if not self._fh.closed:
+            self._fh.flush()
 
 
 def run_with_stderr_tee(train_fn: Callable[[], Any], experiment_dir: Path) -> Any:

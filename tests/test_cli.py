@@ -117,6 +117,58 @@ def test_budget_record_gpu_h_negative_exits_2(experiments_root: Path) -> None:
     assert "gpu_h_used: 0.5" in budget_after
 
 
+def test_budget_init_seeds_fresh_experiment(experiments_root: Path) -> None:
+    fresh = experiments_root / "002-fresh"
+    fresh.mkdir()
+    result = run_cli(
+        "budget", "--experiment", "002", "init", "--profile", "lora", "--experiments-root", experiments_root
+    )
+    assert result.returncode == 0, result.stderr
+    seeded = (fresh / "budget.md").read_text()
+    assert "compute_cap_gpu_h: 4.0" in seeded
+    assert "scale_ceiling_params: 12000000000" in seeded
+    assert "gpu_h_used: 0.0" in seeded
+
+
+def test_budget_init_refuses_overwrite_with_spend(experiments_root: Path) -> None:
+    # The fixture's 001-demo already has gpu_h_used: 0.5 — init must not silently wipe it.
+    result = run_cli(
+        "budget", "--experiment", "001", "init", "--profile", "smoke", "--experiments-root", experiments_root
+    )
+    assert result.returncode == 1, result.stderr
+    assert "spend" in result.stderr.lower()
+    assert "gpu_h_used: 0.5" in (experiments_root / "001-demo" / "budget.md").read_text()
+
+
+def test_budget_init_force_reseeds_over_spend(experiments_root: Path) -> None:
+    result = run_cli(
+        "budget", "--experiment", "001", "init", "--profile", "sft", "--force", "--experiments-root", experiments_root
+    )
+    assert result.returncode == 0, result.stderr
+    seeded = (experiments_root / "001-demo" / "budget.md").read_text()
+    assert "compute_cap_gpu_h: 6.0" in seeded
+    # --force resets every spend counter (fixture had paths_launched: 1, gpu_h_used: 0.5).
+    assert "paths_launched: 0" in seeded
+    assert "retries_used: 0" in seeded
+    assert "gpu_h_used: 0.0" in seeded
+
+
+def test_budget_init_unknown_profile_exits_2(experiments_root: Path) -> None:
+    fresh = experiments_root / "003-x"
+    fresh.mkdir()
+    result = run_cli(
+        "budget", "--experiment", "003", "init", "--profile", "does-not-exist", "--experiments-root", experiments_root
+    )
+    assert result.returncode == 2, result.stderr
+
+
+def test_budget_init_missing_profile_exits_2(experiments_root: Path) -> None:
+    fresh = experiments_root / "004-x"
+    fresh.mkdir()
+    result = run_cli("budget", "--experiment", "004", "init", "--experiments-root", experiments_root)
+    assert result.returncode == 2, result.stderr
+
+
 def test_verify_passing_run_exits_0(experiments_root: Path) -> None:
     result = run_cli("verify", "--experiment", "001", "--experiments-root", experiments_root)
     assert result.returncode == 0, result.stderr
@@ -199,8 +251,11 @@ def test_notify_without_env_exits_0() -> None:
         for key, value in os.environ.items()
         if key not in {"TG_BOT_TOKEN", "TG_CHAT_ID", "SLACK_WEBHOOK_URL", "SLACK_BOT_TOKEN", "SLACK_CHANNEL_ID"}
     }
+    # notify.sh sources the project .env, which may re-add real tokens the dict above stripped.
+    # Dry-run so the script composes and exits without ever touching the network.
+    env["NOTIFY_DRY_RUN"] = "1"
     result = subprocess.run(
-        ["bash", "scripts/bash/notify.sh", "plan_ready", "x"],
+        ["bash", "scripts/bash/notify.sh", "plan_ready", "notify-test"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
@@ -208,6 +263,7 @@ def test_notify_without_env_exits_0() -> None:
         env=env,
     )
     assert result.returncode == 0, result.stderr
+    assert "Plan ready" in result.stdout
 
 
 def test_gpu_probe_prints_keys_and_exits_0() -> None:

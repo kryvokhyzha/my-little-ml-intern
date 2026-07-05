@@ -1,3 +1,5 @@
+# Autoresearch orchestrator: many exploratory paths over small models, each cheap
+# to run once. Consumed by the autoresearch-loop skill.
 max_paths: 10
 max_retries_per_path: 1
 compute_cap_gpu_h: 8.0

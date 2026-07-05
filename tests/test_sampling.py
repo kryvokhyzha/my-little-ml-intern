@@ -52,11 +52,12 @@ class _FakeEnc(dict):
 
 class _FakeTokenizer:
     pad_token_id = 0
+    truncation_side = "right"
 
     def __init__(self):
         self.add_special_tokens_calls: list[bool] = []
 
-    def __call__(self, text, return_tensors=None, add_special_tokens=True):
+    def __call__(self, text, return_tensors=None, add_special_tokens=True, truncation=False, max_length=None):
         self.add_special_tokens_calls.append(add_special_tokens)
         return _FakeEnc(input_ids=[[1, 2, 3]])
 

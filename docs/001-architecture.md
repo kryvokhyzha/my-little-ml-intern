@@ -41,7 +41,7 @@ experiments/NNN-<slug>/
 ├── ledger.md        # per-path ledger table (managed by intern.ledger)
 ├── research.md      # optional recipe table from literature-recipe-research
 ├── board.md         # autoresearch shared board (see board.md format)
-├── metrics.jsonl    # append-only metric/event stream (written by intern.callbacks)
+├── metrics.jsonl    # gitignored: append-only metric/event stream (intern.callbacks)
 ├── verify.md        # written ONLY by intern.verify
 ├── results.md       # winner + comparison; forbidden unless verify exit 0
 ├── postmortems/     # path-<id>.md: symptom → root-cause hypothesis → fix
@@ -219,6 +219,8 @@ A low loss number is never evidence the model works.
 
 - `@dataclass Budget` — caps + spent fields mirroring budget.md.
 - `load_budget(path) -> Budget`, `save_budget(budget, path)`.
+- `load_budget_profile(configs_dir, profile) -> Budget` — build a fresh Budget
+  (spend zeroed) from `configs/budget/<profile>.yaml`; backs `budget init`.
 - `class BudgetGate(path)` — `can_launch_path(params=None) -> tuple[bool, str]`
   (denies when `params` exceeds `scale_ceiling_params`),
   `can_retry(path_id, ledger) -> tuple[bool, str]`, `record_launch()`,
@@ -348,6 +350,7 @@ or full `001-slug`):
 
 ```
 uv run python scripts/python/intern.py verify --experiment 001 [--vocab-size N] [--checks a,b]
+uv run python scripts/python/intern.py budget --experiment 001 init --profile lora [--force]
 uv run python scripts/python/intern.py budget --experiment 001 status|can-launch|record-launch|record-retry
 uv run python scripts/python/intern.py budget --experiment 001 can-launch --params 135000000
 uv run python scripts/python/intern.py budget --experiment 001 can-retry --path-id path-1
@@ -382,11 +385,12 @@ defaults to `<HF_USER or whoami>/<project_name>-<experiment_name>`.
 `--private` accepts ONLY a bool or the exact strings `true`/`false`
 (case-insensitive); anything else — including fire-parsed ints — exits 2. A
 resolved `false` logs a loud warning that the repo will be world-readable.
-Before upload, the bundle scrub scans staged text files against a class-level
-pattern list — token-shaped strings (`hf_`, `sk-`, `xox[abp]-`, `AKIA`, `ghp_`
-prefixes) and home-dir absolute paths (`/Users/<name>/`, `/home/<name>/`); a hit
-logs the file and pattern name (never the value) and exits 2. Env
-`INTERN_SKIP_BUNDLE_SCRUB=1` bypasses the scrub.
+Before upload, the bundle scrub scans staged text files for token-shaped strings
+(`hf_`, `sk-`, `xox[abp]-`, `AKIA`, `ghp_` prefixes) and the CURRENT machine's
+home path (`Path.home()` — an environment leak, not any `/Users/x/` which model
+generations legitimately echo from training data); a hit logs the file and
+pattern name (never the value) and exits 2. Env `INTERN_SKIP_BUNDLE_SCRUB=1`
+bypasses the scrub.
 
 `scripts/bash/notify.sh <event> "<message>"` — events exactly: `plan_ready`,
 `code_ready`, `train_started`, `train_done`, `error`, `blocker`,
@@ -409,14 +413,16 @@ defaults:
   - trainer: trl_sft
   - tracking: trackio
   - compute: local
-  - budget: default
+  - budget: default # task-keyed: smoke|default|lora|sft|dpo|grpo|pretrain|autoresearch
   - _self_
 
 experiment_name: 001-<slug>
 ```
 
 Groups land under `model.*`, `data.*`, `trainer.*`, `tracking.*`, `compute.*`,
-`budget.*`.
+`budget.*`. Seed budget.md from the composed profile with
+`intern.py budget --experiment NNN init --profile <name>` (see
+[docs/004](004-budget-and-gates.md)).
 
 **model group** (`configs/model/<name>.yaml`) — Hydra-instantiable nodes,
 consumed via
@@ -476,6 +482,11 @@ TrackioCallback hardcodes its init call and cannot forward it).
   must exist. Never fire `train_done` for a run with no passing path.
 - OOM recovery may change batch size / grad accumulation / GPU tier — never the
   method, dataset, or sequence length without user approval.
+- No custom agents: the pack is skills-only (decided 2026-07-05). Orchestrating
+  skills stay inline (they need AskUserQuestion, user visibility, and the Skill
+  tool); isolated leaf work uses `context: fork` in skill frontmatter
+  (literature-recipe-research) or ad-hoc read-only subagents with the skill's
+  rubric in the prompt (autoresearch-loop critics).
 
 ## v1 scope and roadmap
 

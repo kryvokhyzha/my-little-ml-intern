@@ -79,7 +79,7 @@ defaults:
   - trainer: trl_sft
   - tracking: trackio
   - compute: local
-  - budget: default
+  - budget: <pick> # smoke | default | lora | sft | dpo | grpo | pretrain | autoresearch
   - _self_
 
 experiment_name: NNN-<slug>
@@ -89,15 +89,17 @@ Swap a group pick only when the task calls for it: `model` ∈
 `smollm2_135m|gemma_4_e2b_it|gemma_4_e2b_it_4bit`, `data` ∈
 `tiny_synthetic|pi_mono_sft`, `trainer` ∈
 `trl_sft|trl_sft_lora|trl_dpo|trl_grpo|lightning|axolotl`, `tracking` ∈
-`trackio|wandb|none`, `compute` ∈ `local|ssh|modal|vast|hf_jobs` (see
-`configs/*/`). Model identity lives in the `model` group and dataset identity in
-the `data` group — never invent values by typing raw repo ids or dataset slugs
-into trainer keys; override the `model:`/`data:` pick instead. A new model or
-dataset is a one-file addition (`configs/model/<name>.yaml` /
-`configs/data/<name>.yaml`) following the `_target_` pattern in
-`docs/001-architecture.md` ("Config groups"). Set other concrete overrides under
-`_self_` only when actually known. Tracking backend is never hardcoded in code;
-adapters read `cfg.tracking.backend`.
+`trackio|wandb|none`, `compute` ∈ `local|ssh|modal|vast|hf_jobs`, `budget` ∈
+`smoke|default|lora|sft|dpo|grpo|pretrain|autoresearch` (see `configs/*/`).
+**Pick the budget by task** — caps must fit the work (a smoke needs minutes; a
+GRPO run needs hours). The catalog is in step 5. Model identity lives in the
+`model` group and dataset identity in the `data` group — never invent values by
+typing raw repo ids or dataset slugs into trainer keys; override the
+`model:`/`data:` pick instead. A new model or dataset is a one-file addition
+(`configs/model/<name>.yaml` / `configs/data/<name>.yaml`) following the
+`_target_` pattern in `docs/001-architecture.md` ("Config groups"). Set other
+concrete overrides under `_self_` only when actually known. Tracking backend is
+never hardcoded in code; adapters read `cfg.tracking.backend`.
 
 ### 4. Create the script
 
@@ -210,26 +212,32 @@ One variable per path — prefer exactly one Hydra override per path.
 | path-1  | H1         | <e.g. trainer.args.learning_rate=1e-4> |
 ```
 
-`budget.md` — read the current values from `configs/budget/default.yaml` (or
-whichever budget group the config composes) and write them in exactly this
-format (values shown match the group defaults at time of writing — always
-re-read the YAML):
+`budget.md` — **do not hand-write the caps.** Seed it from the same profile the
+config composes so the two never drift:
 
-```text
-# Budget
-
-max_paths: 2
-max_retries_per_path: 2
-compute_cap_gpu_h: 2.0
-scale_ceiling_params: 200000000
-token_budget: null
-
-## Spent
-
-paths_launched: 0
-retries_used: 0
-gpu_h_used: 0.0
+```bash
+uv run python scripts/python/intern.py budget --experiment NNN init --profile <name>
 ```
+
+`init` writes the caps from `configs/budget/<name>.yaml` with all spend counters
+at zero, and refuses to clobber a budget.md that already has recorded spend
+(pass `--force` to re-seed intentionally). Budget is task-keyed — choose the
+profile whose caps fit the work:
+
+| profile        | paths × retries | GPU-h | param ceiling | use for                                   |
+| -------------- | --------------- | ----: | ------------: | ----------------------------------------- |
+| `smoke`        | 1 × 1           |  0.25 |          200M | plumbing / tiny-model checks              |
+| `default`      | 2 × 2           |   2.0 |          200M | generic small run (safe fallback)         |
+| `lora`         | 2 × 2           |   4.0 |           12B | LoRA / QLoRA on one GPU                   |
+| `sft`          | 2 × 2           |   6.0 |            3B | full-parameter SFT (memory-bound)         |
+| `dpo`          | 2 × 2           |   8.0 |           12B | preference tuning (ref model doubles fwd) |
+| `grpo`         | 3 × 1           |  12.0 |           12B | online RL / GRPO (rollout-bound)          |
+| `pretrain`     | 1 × 1           |  24.0 |            2B | from-scratch pretraining                  |
+| `autoresearch` | 10 × 1          |   8.0 |          200M | autoresearch-loop orchestrator            |
+
+Need caps between profiles? Add a new `configs/budget/<name>.yaml` (five cap
+keys, copy an existing one) rather than hand-editing budget.md — the profile
+stays the single source of truth.
 
 `ledger.md` — empty table, header columns exactly:
 

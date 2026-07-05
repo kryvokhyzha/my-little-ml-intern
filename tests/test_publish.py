@@ -257,11 +257,20 @@ def test_scrub_blocks_planted_token(experiment_dir: Path, fake_api: FakeApi) -> 
 
 def test_scrub_blocks_home_dir_path(experiment_dir: Path, fake_api: FakeApi) -> None:
     plan = experiment_dir / "plan.md"
-    plan.write_text(plan.read_text() + "\ndata lives in /Users/someone/x\n")
+    # The current machine's home leaking into an artifact is the real threat.
+    plan.write_text(plan.read_text() + f"\nrun dir was {Path.home()}/work/run\n")
 
     assert publish_run(experiment_dir) == 2
     assert fake_api.created == []
     assert fake_api.folder_uploads == []
+
+
+def test_scrub_allows_other_users_paths(experiment_dir: Path, fake_api: FakeApi) -> None:
+    # Model generations echo training-data paths under other users — not an env leak.
+    plan = experiment_dir / "plan.md"
+    plan.write_text(plan.read_text() + "\nsample output mentions /Users/badlogic/workspaces/pi/x\n")
+
+    assert publish_run(experiment_dir) == 0
 
 
 def test_scrub_bypass_env(experiment_dir: Path, fake_api: FakeApi, monkeypatch) -> None:
@@ -272,3 +281,28 @@ def test_scrub_bypass_env(experiment_dir: Path, fake_api: FakeApi, monkeypatch) 
     assert publish_run(experiment_dir) == 0
     assert len(fake_api.folder_uploads) == 2
     assert len(fake_api.file_uploads) == 1
+
+
+def test_model_card_adapter_frontmatter(tmp_path):
+    from intern.publish import _model_card
+
+    model_dir = tmp_path / "checkpoint-200"
+    model_dir.mkdir()
+    (model_dir / "adapter_config.json").write_text('{"base_model_name_or_path": "google/gemma-4-E2B-it"}')
+    card = _model_card("# Results — 001\n\n**Winner: path-1** works.\n", "001-demo", model_dir, "me/adapter")
+
+    assert card.startswith("---\n")
+    assert "base_model: google/gemma-4-E2B-it" in card
+    assert "library_name: peft" in card
+    assert 'PeftModel.from_pretrained(base, "me/adapter")' in card
+
+
+def test_model_card_full_model_has_no_adapter_frontmatter(tmp_path):
+    from intern.publish import _model_card
+
+    model_dir = tmp_path / "ckpts"
+    model_dir.mkdir()  # no adapter_config.json -> full model
+    card = _model_card("# Results\n\n**Winner: path-1**\n", "002-demo", model_dir, "me/model")
+
+    assert not card.startswith("---")
+    assert "library_name: peft" not in card
