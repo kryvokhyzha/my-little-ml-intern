@@ -7,7 +7,7 @@ Implementation must match this document exactly; change the document first, then
 
 `my-little-ml-intern` is a template-conforming reference project and an
 installable pack: `.claude/skills/` + `src/intern/` are designed to be vendored
-into other projects built from `llm-python-template`. The agent brain is Claude
+into other projects. The agent brain is Claude
 Code's own loop — skills instruct, and the `src/intern` library **enforces**:
 verification, budget, and dependency-age gates are Python with nonzero exit
 codes. Skills must refuse to proceed when a gate fails.

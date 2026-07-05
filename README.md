@@ -124,7 +124,7 @@ Source of truth: [`.claude/skills/`](.claude/skills/) (auto-discovered by Claude
 
 ## 📦 Vendoring into your project
 
-Copy into any repo built from `llm-python-template`:
+Copy into your repo:
 
 1. `.claude/skills/` — the skill pack
 2. `src/intern/` — the enforcement library (plus the `src/helper/display` improvements)

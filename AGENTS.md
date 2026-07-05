@@ -12,8 +12,7 @@ via `rootutils`).
 Three parts work together:
 
 - **`.claude/skills/`** — the skill pack (experiment scaffolding, training
-  discipline, verification, tracking, literature research). Designed to be
-  vendored into other projects built from `llm-python-template`.
+  discipline, verification, tracking, literature research).
 - **`src/intern/`** — enforcement library: verification, budget, ledger,
   dependency-age gates with nonzero exit codes. Skills instruct; these scripts
   refuse.
