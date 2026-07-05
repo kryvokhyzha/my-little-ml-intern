@@ -6,7 +6,8 @@ import yaml
 from datasets import Dataset
 from omegaconf import OmegaConf
 
-from data.loading import require_prompt_column as _require_prompt_column
+from data.loading import load_split as _load_split
+from data.loading import validate_columns as _validate_columns
 from training import axolotl_adapter
 from training.lightning_adapter import TrackioLightningLogger, _build_logger
 from training.runtime import apply_tracking_group as _apply_tracking_group
@@ -189,13 +190,62 @@ class TestGrpoRewardFuncs:
         assert _grpo_reward_funcs(cfg) == [math.sqrt, math.dist]
 
 
-class TestRequirePromptColumn:
-    def test_prompt_column_present(self):
-        _require_prompt_column(Dataset.from_dict({"prompt": ["p"]}), "train")
+class TestValidateColumns:
+    @pytest.mark.parametrize(
+        "columns",
+        [["text"], ["prompt", "completion"], ["messages"]],
+    )
+    def test_sft_accepts_each_format(self, columns):
+        _validate_columns(Dataset.from_dict({c: ["x"] for c in columns}), "trl_sft", "train")
 
-    def test_missing_prompt_column_raises(self):
-        with pytest.raises(ValueError, match="'prompt' column"):
-            _require_prompt_column(Dataset.from_dict({"text": ["t"]}), "train")
+    def test_sft_honors_custom_text_field(self):
+        _validate_columns(Dataset.from_dict({"body": ["x"]}), "trl_sft", "train", text_field="body")
+
+    def test_sft_rejects_unusable_columns(self):
+        with pytest.raises(ValueError, match="trl_sft train"):
+            _validate_columns(Dataset.from_dict({"question": ["q"], "answer": ["a"]}), "trl_sft", "train")
+
+    def test_dpo_accepts_implicit_prompt(self):
+        _validate_columns(Dataset.from_dict({"chosen": ["c"], "rejected": ["r"]}), "trl_dpo", "train")
+
+    def test_dpo_rejects_sft_shaped_data(self):
+        with pytest.raises(ValueError, match="chosen"):
+            _validate_columns(Dataset.from_dict({"prompt": ["p"], "completion": ["c"]}), "trl_dpo", "train")
+
+    def test_grpo_requires_prompt(self):
+        _validate_columns(Dataset.from_dict({"prompt": ["p"]}), "trl_grpo", "train")
+        with pytest.raises(ValueError, match="prompt"):
+            _validate_columns(Dataset.from_dict({"text": ["t"]}), "trl_grpo", "train")
+
+    def test_unknown_task_is_not_checked(self):
+        _validate_columns(Dataset.from_dict({"anything": ["x"]}), "lightning", "train")
+
+
+class TestLoadSplit:
+    def test_forwards_loader_kwargs(self, tmp_path):
+        csv = tmp_path / "rows.csv"
+        csv.write_text("prompt;completion\np1;c1\n")
+        ds = _load_split(str(csv), "train", delimiter=";")
+        assert ds.column_names == ["prompt", "completion"]
+
+    def test_plain_dataset_dir_refuses_eval(self, tmp_path):
+        Dataset.from_dict({"text": ["a"]}).save_to_disk(str(tmp_path / "ds"))
+        with pytest.raises(ValueError, match="training data"):
+            _load_split(str(tmp_path / "ds"), "train", for_eval=True)
+
+    def test_eval_node_gets_guard_injected(self, tmp_path):
+        from hydra.errors import InstantiationException
+
+        from training.trl.run import _load_data_node
+
+        Dataset.from_dict({"text": ["a"]}).save_to_disk(str(tmp_path / "ds"))
+        node = OmegaConf.create(
+            {"_target_": "data.loading.load_split", "dataset": str(tmp_path / "ds"), "split": "train"}
+        )
+        assert _load_data_node(node) is not None
+        # hydra wraps the guard's ValueError in InstantiationException; the message survives.
+        with pytest.raises(InstantiationException, match="training data"):
+            _load_data_node(node, for_eval=True)
 
 
 class TestApplyTrackingGroup:

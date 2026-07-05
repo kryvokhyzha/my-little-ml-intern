@@ -271,8 +271,8 @@ Invoke via `Skill` (or `/name`) when the request matches.
 
 ## Engineering discipline
 
-Behavioral rules that reduce common agent coding mistakes.
-They bias toward caution over speed — for trivial tasks, use judgment.
+Behavioral rules that reduce common agent coding mistakes. They bias toward
+caution over speed — for trivial tasks, use judgment.
 
 - **Think before coding.** State assumptions explicitly; if multiple
   interpretations exist, present them — never pick one silently. Research first

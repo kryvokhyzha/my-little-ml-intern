@@ -1,4 +1,13 @@
 # Materialized {prompt, completion} dataset pushed by scripts/python/prep-pi-mono-sft.py.
+# train/eval are Hydra instantiate nodes — extra keys are forwarded to the loader
+# (revision, name, data_files, ...); for exotic loading point _target_ at
+# datasets.load_dataset directly.
 path: ${oc.env:HF_USER,null}/pi-mono-sft
-dataset_split: train
-eval_split: test
+train:
+  _target_: data.loading.load_split
+  dataset: ${data.path}
+  split: train
+eval:
+  _target_: data.loading.load_split
+  dataset: ${data.path}
+  split: test

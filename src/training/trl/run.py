@@ -8,13 +8,23 @@ from typing import Any, Callable
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 
-from data.loading import load_split, require_prompt_column
+from data.loading import validate_columns
 
 from ..models import load_model, load_ref_model, load_tokenizer, peft_config
 from ..runtime import apply_tracking_group, is_main_process, run_with_stderr_tee, smoke_enabled
 from ..sampling import resolve_sample_prompts, write_samples
 from .config import apply_smoke, build_args, final_train_loss, write_meta
 from .rewards import grpo_reward_funcs
+
+
+def _load_data_node(node: DictConfig, for_eval: bool = False) -> Any:
+    from hydra.utils import instantiate
+
+    container: dict[str, Any] = OmegaConf.to_container(node, resolve=True)
+    # The eval-on-train guard is load_split's; custom _target_s own their split hygiene.
+    if for_eval and container.get("_target_") == "data.loading.load_split":
+        container.setdefault("for_eval", True)
+    return instantiate(container)
 
 
 def _run_trl(
@@ -46,18 +56,20 @@ def _run_trl(
     tokenizer = load_tokenizer(cfg)
     model = load_model(cfg)
 
-    train_dataset = load_split(str(cfg.data.path), str(cfg.data.dataset_split))
-    eval_split = OmegaConf.select(cfg, "data.eval_split")
-    eval_dataset = load_split(str(cfg.data.path), str(eval_split), for_eval=True) if eval_split else None
-    if grpo:
-        require_prompt_column(train_dataset, "train")
-        if eval_dataset is not None:
-            require_prompt_column(eval_dataset, "eval")
+    train_dataset = _load_data_node(cfg.data.train)
+    eval_node = OmegaConf.select(cfg, "data.eval")
+    eval_dataset = _load_data_node(eval_node, for_eval=True) if eval_node else None
+
+    task = str(OmegaConf.select(cfg, "trainer.kind"))
+    text_field = str(OmegaConf.select(cfg, "trainer.args.dataset_text_field") or "text")
+    validate_columns(train_dataset, task, "train", text_field=text_field)
+    if eval_dataset is not None:
+        validate_columns(eval_dataset, task, "eval", text_field=text_field)
 
     smoke_overrides, train_dataset = apply_smoke({}, train_dataset, smoke)
     if eval_dataset is not None and str(OmegaConf.select(cfg, "trainer.args.eval_strategy") or "no") == "no":
         smoke_overrides.setdefault("eval_strategy", "steps")
-        logger.info("eval_split is set but eval_strategy='no' — overriding to 'steps' so eval actually runs")
+        logger.info("data.eval is set but eval_strategy='no' — overriding to 'steps' so eval actually runs")
     apply_tracking_group(cfg)
     args = build_args(cfg, config_cls, **smoke_overrides)
 

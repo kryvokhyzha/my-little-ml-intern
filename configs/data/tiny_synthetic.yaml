@@ -1,4 +1,7 @@
 # Deterministic local smoke corpus, materialized by data.synthetic.build_tiny_text_dataset.
 path: ${experiment_dir}/data
-dataset_split: train
-eval_split: null
+train:
+  _target_: data.loading.load_split
+  dataset: ${data.path}
+  split: train
+eval: null

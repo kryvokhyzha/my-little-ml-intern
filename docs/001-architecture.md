@@ -7,10 +7,10 @@ Implementation must match this document exactly; change the document first, then
 
 `my-little-ml-intern` is a template-conforming reference project and an
 installable pack: `.claude/skills/` + `src/intern/` are designed to be vendored
-into other projects. The agent brain is Claude
-Code's own loop — skills instruct, and the `src/intern` library **enforces**:
-verification, budget, and dependency-age gates are Python with nonzero exit
-codes. Skills must refuse to proceed when a gate fails.
+into other projects. The agent brain is Claude Code's own loop — skills
+instruct, and the `src/intern` library **enforces**: verification, budget, and
+dependency-age gates are Python with nonzero exit codes. Skills must refuse to
+proceed when a gate fails.
 
 ## Security defaults
 
@@ -286,7 +286,7 @@ Framework-neutral plumbing is shared, not owned by a lane: `training/runtime.py`
 (stderr tee, `is_main_process`, `smoke_enabled`, `apply_tracking_group`),
 `training/models.py` (`load_model` with dtype/quant, `peft_config`),
 `training/sampling.py` (`SAMPLE_PROMPTS`, `write_samples`). Dataset loading
-lives in `data/` (`data.loading.load_split` / `require_prompt_column`,
+lives in `data/` (`data.loading.load_split` / `validate_columns`,
 `data.synthetic.build_tiny_text_dataset`). The `lightning_adapter` imports the
 shared modules directly — never TRL internals.
 
@@ -297,8 +297,10 @@ shared modules directly — never TRL internals.
   `quantization_config` the loader injects `dtype: float32` and warns —
   transformers v5 otherwise inherits the checkpoint's stored dtype, and fp16
   full-precision training diverges; the tokenizer wrapper applies the pad→eos
-  fallback), load the dataset from the `cfg.data` group
-  (`path`/`dataset_split`/`eval_split` via `data.loading.load_split`), map
+  fallback), instantiate the datasets from the `cfg.data` group's `train`/`eval`
+  `_target_` nodes (`for_eval=True` is injected for the `load_split` target so a
+  plain on-disk Dataset can never silently eval on training data) and fail fast
+  via `data.loading.validate_columns` when the columns cannot feed the task, map
   `cfg.trainer.args` onto `SFTConfig`/`DPOConfig`, attach `TRLAlertCallback`,
   set `report_to` from `cfg.tracking.backend`,
   `include_num_input_tokens_seen=True`, write `param_count`/`vocab_size` meta,
@@ -442,10 +444,19 @@ model — DPO experiments set it under `_self_` or a dedicated model file; absen
 elsewhere) and `target_params:` (an int enabling the opt-in `param_drift` verify
 check; absent means that check SKIPs).
 
-**data group** (`configs/data/<name>.yaml`) — plain keys, consumed by
-`data.loading.load_split`: `path` (Hub id or local dir/file), `dataset_split`,
-`eval_split` (null = no eval). Optional `sample_prompts` overrides the
-generation-sanity probe with fixed raw strings; omit it (shipped configs do) and
+**data group** (`configs/data/<name>.yaml`) — `train:` and `eval:` are Hydra
+`_target_` instantiate nodes (mirroring the model group); `eval: null` = no
+eval. The default target is `data.loading.load_split` (`dataset` = Hub id or
+local dir/file, `split`; any extra key — `revision`, `name`, `data_files`, … —
+is forwarded to the underlying `datasets` loader), with a plain `path:` key kept
+for interpolation (`${data.path}`) and for scripts that materialize local data.
+Exotic loading points `_target_` at `datasets.load_dataset` directly. The
+adapter injects `for_eval=True` into `load_split` eval nodes (plain on-disk
+Dataset + eval = refused) and validates columns per task
+(`data.loading.validate_columns`: SFT needs `text`/`dataset_text_field`,
+`prompt`+`completion`, or `messages`; DPO needs `chosen`+`rejected`; GRPO needs
+`prompt`). Optional `sample_prompts` overrides the generation-sanity probe with
+fixed raw strings; omit it (shipped configs do) and
 `training.sampling.resolve_sample_prompts` picks the probe automatically —
 held-out prompts from the eval/train `prompt` column for prompt/completion data
 (rendered in the model's chat format, so `add_special_tokens=False`), else the

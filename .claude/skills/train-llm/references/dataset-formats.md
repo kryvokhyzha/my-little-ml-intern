@@ -3,11 +3,11 @@
 Format mismatch is the most common training failure. Verify actual column names
 against this table before any GPU spend — the check costs seconds.
 
-| Method | Trainer group      | Required columns                                                                                                    |
-| ------ | ------------------ | ------------------------------------------------------------------------------------------------------------------- |
-| SFT    | `trainer=trl_sft`  | `messages` (list of `{"role": ..., "content": ...}` dicts) — preferred; OR plain `text`; OR `prompt` + `completion` |
-| DPO    | `trainer=trl_dpo`  | `prompt`, `chosen`, `rejected` — exact names, strictly enforced                                                     |
-| GRPO   | `trainer=trl_grpo` | `prompt` only — prompt-only data; completions are generated during training and reward functions grade them         |
+| Method | Trainer group      | Required columns                                                                                                           |
+| ------ | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| SFT    | `trainer=trl_sft`  | `messages` (list of `{"role": ..., "content": ...}` dicts) — preferred; OR plain `text`; OR `prompt` + `completion`        |
+| DPO    | `trainer=trl_dpo`  | `chosen` + `rejected` required, exact names; `prompt` strongly recommended (TRL's implicit-prompt format works without it) |
+| GRPO   | `trainer=trl_grpo` | `prompt` only — prompt-only data; completions are generated during training and reward functions grade them                |
 
 Notes:
 
@@ -54,13 +54,15 @@ No-download alternative via the datasets-server API:
 curl -s 'https://datasets-server.huggingface.co/first-rows?dataset=<hub-slug>&config=default&split=train' | head -c 3000
 ```
 
-Also check split names (`train` is not guaranteed) and row counts — confirm
-`cfg.data.dataset_split` / `eval_split` exist. While you're there, audit what
-you loaded: class imbalance, empty strings, duplicated rows, wildly long
-outliers. Looking at data is the cheapest performance win available and prevents
-failed jobs. Also verify `max_length` truncation does not cut the decisive
-assistant/tool turn — measure sampled tokenized lengths against `trainer.args`
-before launch.
+Also check split names (`train` is not guaranteed) and row counts — confirm the
+splits named in the `cfg.data.train` / `cfg.data.eval` nodes exist. Column
+mismatches are also enforced in code at load time
+(`data.loading.validate_columns` raises before any GPU step), but that check
+sees only column names — this audit is about what's IN them: class imbalance,
+empty strings, duplicated rows, wildly long outliers. Looking at data is the
+cheapest performance win available and prevents failed jobs. Also verify
+`max_length` truncation does not cut the decisive assistant/tool turn — measure
+sampled tokenized lengths against `trainer.args` before launch.
 
 ## When mapping is needed
 
