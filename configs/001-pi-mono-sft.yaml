@@ -1,0 +1,40 @@
+# @package _global_
+defaults:
+  - main
+  - model: gemma_4_e2b_it_4bit
+  - data: pi_mono_sft
+  - trainer: trl_sft_lora
+  - tracking: trackio
+  - compute: local
+  - budget: default
+  - _self_
+
+experiment_name: 001-pi-mono-sft
+
+trainer:
+  planned_tokens: 3000000 # estimate — tune from num_input_tokens_seen after run 1
+  peft:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    bias: none
+    task_type: CAUSAL_LM
+    target_modules: '.*language_model\.layers\.\d+\.(self_attn\.(q_proj|k_proj|v_proj|o_proj)|mlp\.(gate_proj|up_proj|down_proj))$'
+  args:
+    learning_rate: 2.0e-4
+    max_steps: 200
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 16
+    max_length: 4096
+    packing: false
+    completion_only_loss: true
+    gradient_checkpointing: true
+    bf16: true
+    lr_scheduler_type: cosine
+    warmup_ratio: 0.03
+    eval_strategy: steps
+    eval_steps: 50
+    save_strategy: steps
+    save_steps: 100
+    logging_steps: 5
+    optim: paged_adamw_8bit

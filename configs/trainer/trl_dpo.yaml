@@ -1,15 +1,6 @@
 kind: trl_dpo
-model_name: null
-dtype: float32
-sample_prompts: null
-ref_model_name: null
-dataset: null
-dataset_split: train
-eval_split: null
-target_params: null
 planned_tokens: null
 peft: null
-quantization: null
 args:
   output_dir: ${experiment_dir}/ckpts
   beta: 0.1

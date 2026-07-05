@@ -129,8 +129,11 @@ One JSON object per line, two record kinds:
 Required meta keys written by adapters: `task` (the trainer `kind`),
 `param_count`, `vocab_size`; when known: `planned_tokens`. Optional meta written
 after trainer construction: `trainable_param_count` (post-peft `requires_grad`
-numel) and `quantized` (bool, set by the quantization path). Token consumption
-is the `num_input_tokens_seen` metric series. Alert messages follow
+numel) and `quantized` (bool, set by the quantization path). Optional
+`completion_only` (bool, set when `SFTConfig.completion_only_loss` is truthy —
+signals the train loss is over assistant-target tokens only, not corpus
+cross-entropy). Token consumption is the `num_input_tokens_seen` metric series.
+Alert messages follow
 `<metric>=<value> at step <N> — <hypothesis>, try <action>`.
 
 **Run boundary:** adapters append a `run_start` event (fields: `task`,
@@ -180,17 +183,21 @@ unless stated):
 1. `loss_plausibility` — LM tasks only (SKIP for `trl_dpo`/`trl_grpo`/
    `lightning` — their loss is not vocab cross-entropy): final train loss ∈
    (0.1·ln(V), ln(V)), V = `vocab_size`; loss < 1.0 is a red-flag FAIL even when
-   V is unknown.
+   V is unknown. SKIPs (before the task/vocab logic) when the `completion_only`
+   meta is truthy — completion-only SFT loss is over assistant-target tokens
+   only, so the band and the <1.0 red-flag do not apply; lean on
+   `eval_train_gap`, `generation_sanity`, and held-out eval instead.
 2. `eval_train_gap` — |final eval loss − final train loss| < 0.5; eval loss is
    `loss(split=eval)`, `eval_loss`, or `val_loss` (Lightning).
 3. `data_consumption` — final `num_input_tokens_seen` ≥ 0.7 × `planned_tokens`.
 4. `stderr_scan` — grep `logs/stderr.log`: FAIL on
    `Traceback|RuntimeError|CUDA out of memory`, listed-but-PASS on warnings;
    SKIP when file absent.
-5. `param_drift` — |`param_count` − trainer `target_params`| ≤ 15%. LoRA runs
-   compare base-model numel: `param_count` is measured pre-peft and
-   `target_params` stays the base size. SKIP when the `quantized` meta is truthy
-   — 4-bit storage breaks numel comparability.
+5. `param_drift` — opt-in: SKIP unless the experiment sets `model.target_params`
+   (omitted from shipped configs). When set: |`param_count` − `target_params`| ≤
+   15%. LoRA runs compare base-model numel (`param_count` is measured pre-peft,
+   `target_params` stays the base size). Also SKIP when the `quantized` meta is
+   truthy — 4-bit storage breaks numel comparability.
 6. `generation_sanity` — `logs/samples.jsonl` mechanical proxies: unique-token
    ratio ≥ 0.3 (character-level fallback for non-space-delimited scripts), no
    token > 50% of output, each sample ≥ 50 chars. File absent → FAIL for LM
@@ -281,18 +288,23 @@ lives in `data/` (`data.loading.load_split` / `require_prompt_column`,
 `data.synthetic.build_tiny_text_dataset`). The `lightning_adapter` imports the
 shared modules directly — never TRL internals.
 
-- `training.trl.run_sft(cfg) -> dict` / `run_dpo(cfg) -> dict` — build
-  model/tokenizer/dataset from `cfg.trainer`, load models with explicit
-  `cfg.trainer.dtype` (default `float32`; transformers v5 otherwise inherits the
-  checkpoint's stored dtype, and fp16 full-precision training diverges), map
+- `training.trl.run_sft(cfg) -> dict` / `run_dpo(cfg) -> dict` — instantiate
+  model/tokenizer from the `cfg.model` group (`training.models.load_model(cfg)`
+  / `load_tokenizer(cfg)` wrap `hydra.utils.instantiate` of `model.main` /
+  `model.tokenizer`; when `main` carries neither `dtype` nor
+  `quantization_config` the loader injects `dtype: float32` and warns —
+  transformers v5 otherwise inherits the checkpoint's stored dtype, and fp16
+  full-precision training diverges; the tokenizer wrapper applies the pad→eos
+  fallback), load the dataset from the `cfg.data` group
+  (`path`/`dataset_split`/`eval_split` via `data.loading.load_split`), map
   `cfg.trainer.args` onto `SFTConfig`/`DPOConfig`, attach `TRLAlertCallback`,
   set `report_to` from `cfg.tracking.backend`,
   `include_num_input_tokens_seen=True`, write `param_count`/`vocab_size` meta,
   tee stderr to `logs/stderr.log`, generate 3 sampled continuations (seeded
-  sampling, prompts from `cfg.trainer.sample_prompts` or defaults) to
-  `logs/samples.jsonl` (one `{"prompt", "text"}` object per line) after
-  training, print one line: `VERDICT: TRAIN_OK | final_train_loss=<v>` (or
-  `TRAIN_FAIL | <cause>`).
+  sampling; probe prompts from `resolve_sample_prompts` — held-out `prompt`
+  column for prompt/completion data, else defaults) to `logs/samples.jsonl` (one
+  `{"prompt", "text"}` object per line) after training, print one line:
+  `VERDICT: TRAIN_OK | final_train_loss=<v>` (or `TRAIN_FAIL | <cause>`).
 - `training.trl.run_grpo(cfg) -> dict` — mirrors `run_sft`/`run_dpo` via
   `GRPOConfig`/`GRPOTrainer`. The dataset must contain a `prompt` column
   (ValueError naming the column contract otherwise). Reward functions come from
@@ -303,10 +315,13 @@ shared modules directly — never TRL internals.
   floor reward, never raise. `TRLAlertCallback` attached, meta written
   (`task=trl_grpo`), samples still generated post-run (the policy is an LM),
   same rank-zero + stderr-tee + `VERDICT` contract.
-- Quantization: `cfg.trainer.quantization` (dict of `BitsAndBytesConfig` kwargs,
-  default null) is built into a `BitsAndBytesConfig` and passed to
-  `from_pretrained`; requires the `gpu` dependency group — missing bitsandbytes
-  raises a clear error naming `uv sync --group gpu`.
+- Quantization: a `quantization_config:` nested
+  `_target_: transformers.BitsAndBytesConfig` node inside `model.main` (use a
+  dedicated `<name>_4bit.yaml` model variant); requires the `gpu` dependency
+  group — missing bitsandbytes raises a clear error naming
+  `uv sync --group gpu`. The DPO `ref` model (when set) shares the same load
+  path. Meta: `target_params` comes from `cfg.model.target_params` and the
+  `quantized` meta is emitted when `model.main` carries a `quantization_config`.
 - Tracking wiring: when `cfg.tracking.space_id` is set, adapters pass
   `trackio_space_id` and `hub_private_repo` (from `cfg.tracking.private`,
   default true) so the trackio Space and its metrics dataset bucket are created
@@ -389,6 +404,8 @@ Experiment configs are `# @package _global_` and compose:
 ```yaml
 defaults:
   - main
+  - model: smollm2_135m
+  - data: tiny_synthetic
   - trainer: trl_sft
   - tracking: trackio
   - compute: local
@@ -398,12 +415,43 @@ defaults:
 experiment_name: 001-<slug>
 ```
 
-Groups land under `trainer.*`, `tracking.*`, `compute.*`, `budget.*`.
-`main.yaml` provides `seed`, `project_name`, `experiment_name`,
-`experiment_dir`, `smoke_test`. Tracking backend is never hardcoded in code —
-always `cfg.tracking.backend` (`trackio` primary, `wandb`, `none`).
-`tracking.group` (default null) clusters related runs on the dashboard — wandb
-via the `WANDB_RUN_GROUP` env var (both lanes); trackio via its
+Groups land under `model.*`, `data.*`, `trainer.*`, `tracking.*`, `compute.*`,
+`budget.*`.
+
+**model group** (`configs/model/<name>.yaml`) — Hydra-instantiable nodes,
+consumed via
+`hydra.utils.instantiate(OmegaConf.to_container(..., resolve=True))`: `main:`
+(`_target_: transformers.AutoModelForCausalLM.from_pretrained`,
+`_args_: [<repo_id>]`, kwargs incl. explicit `dtype` — omit it only for
+quantized variants whose `quantization_config:` nested
+`_target_: transformers.BitsAndBytesConfig` node sets compute dtype; the loader
+injects `dtype: float32` and warns when both are absent, per the
+checkpoint-dtype trap); `tokenizer:` (interpolates the model repo via
+`${model.main._args_[0]}`). Quantized variants are separate files
+(`<name>_4bit.yaml`), mirroring the trainer-preset pattern.
+
+Two optional model keys are omitted from the shipped configs and added per
+experiment only when needed: `ref:` (same shape as `main`, the DPO reference
+model — DPO experiments set it under `_self_` or a dedicated model file; absent
+elsewhere) and `target_params:` (an int enabling the opt-in `param_drift` verify
+check; absent means that check SKIPs).
+
+**data group** (`configs/data/<name>.yaml`) — plain keys, consumed by
+`data.loading.load_split`: `path` (Hub id or local dir/file), `dataset_split`,
+`eval_split` (null = no eval). Optional `sample_prompts` overrides the
+generation-sanity probe with fixed raw strings; omit it (shipped configs do) and
+`training.sampling.resolve_sample_prompts` picks the probe automatically —
+held-out prompts from the eval/train `prompt` column for prompt/completion data
+(rendered in the model's chat format, so `add_special_tokens=False`), else the
+built-in `SAMPLE_PROMPTS` for raw-text data.
+
+The trainer group carries only run mechanics: `kind`, `planned_tokens`, `peft`,
+`reward_funcs` (GRPO), `args`. Model identity/loading lives in `model`; dataset
+identity in `data`. `main.yaml` provides `seed`, `project_name`,
+`experiment_name`, `experiment_dir`, `smoke_test`. Tracking backend is never
+hardcoded in code — always `cfg.tracking.backend` (`trackio` primary, `wandb`,
+`none`). `tracking.group` (default null) clusters related runs on the dashboard
+— wandb via the `WANDB_RUN_GROUP` env var (both lanes); trackio via its
 `init(group=...)` kwarg on the Lightning lane only (the TRL lane's
 TrackioCallback hardcodes its init call and cannot forward it).
 

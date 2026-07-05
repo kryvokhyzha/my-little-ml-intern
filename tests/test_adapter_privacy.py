@@ -1,12 +1,46 @@
 import sys
+import types
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
-from omegaconf import OmegaConf
+from loguru import logger
+from omegaconf import DictConfig, OmegaConf
 
 from training.lightning_adapter import TrackioLightningLogger
 from training.models import load_model as _load_model
+from training.models import load_ref_model as _load_ref_model
+from training.models import load_tokenizer as _load_tokenizer
 from training.runtime import is_main_process as _is_main_process
 from training.trl.config import build_args as _build_args
+
+
+def fake_model_factory(repo: str, **kwargs: Any) -> SimpleNamespace:
+    return SimpleNamespace(repo=repo, kwargs=kwargs)
+
+
+def fake_quant_factory(**kwargs: Any) -> SimpleNamespace:
+    return SimpleNamespace(kwargs=kwargs)
+
+
+def fake_tokenizer_factory(repo: str, pad_token: str | None = None) -> SimpleNamespace:
+    return SimpleNamespace(repo=repo, pad_token=pad_token, eos_token="</s>")
+
+
+def model_cfg(**main_extra: Any) -> DictConfig:
+    return OmegaConf.create(
+        {
+            "model": {
+                "main": {"_target_": f"{__name__}.fake_model_factory", "_args_": ["fake/repo"], **main_extra},
+                "tokenizer": {
+                    "_target_": f"{__name__}.fake_tokenizer_factory",
+                    "_args_": ["${model.main._args_[0]}"],
+                },
+                "ref": None,
+                "target_params": None,
+            }
+        }
+    )
 
 
 @pytest.fixture
@@ -60,11 +94,63 @@ class TestBuildArgsSpacePrivacy:
         assert args.hub_private_repo is None
 
 
-class TestLoadModelQuantization:
+class TestLoadModel:
+    def test_explicit_dtype_passes_through(self):
+        model = _load_model(model_cfg(dtype="bfloat16"))
+        assert model.repo == "fake/repo"
+        assert model.kwargs["dtype"] == "bfloat16"
+
+    def test_missing_dtype_injects_float32_and_warns(self):
+        messages: list[str] = []
+        sink = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+        try:
+            model = _load_model(model_cfg())
+        finally:
+            logger.remove(sink)
+        assert model.kwargs["dtype"] == "float32"
+        assert any("float32" in message for message in messages)
+
     def test_missing_bitsandbytes_raises_clear_error(self, monkeypatch):
         monkeypatch.setitem(sys.modules, "bitsandbytes", None)
+        cfg = model_cfg(quantization_config={"_target_": f"{__name__}.fake_quant_factory", "load_in_4bit": True})
         with pytest.raises(ImportError, match="uv sync --group gpu"):
-            _load_model("gpt2", "float32", {"load_in_4bit": True})
+            _load_model(cfg)
+
+    def test_quantized_load_skips_dtype_injection(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "bitsandbytes", types.ModuleType("bitsandbytes"))
+        cfg = model_cfg(quantization_config={"_target_": f"{__name__}.fake_quant_factory", "load_in_4bit": True})
+        model = _load_model(cfg)
+        assert "dtype" not in model.kwargs
+        assert model.kwargs["quantization_config"].kwargs == {"load_in_4bit": True}
+
+
+class TestLoadRefModel:
+    def test_null_ref_returns_none(self):
+        assert _load_ref_model(model_cfg()) is None
+
+    def test_ref_instantiated_when_set(self):
+        cfg = model_cfg()
+        cfg.model.ref = {"_target_": f"{__name__}.fake_model_factory", "_args_": ["ref/repo"], "dtype": "float32"}
+        ref = _load_ref_model(cfg)
+        assert ref.repo == "ref/repo"
+        assert ref.kwargs["dtype"] == "float32"
+
+    def test_ref_shares_dtype_guard(self):
+        cfg = model_cfg()
+        cfg.model.ref = {"_target_": f"{__name__}.fake_model_factory", "_args_": ["ref/repo"]}
+        assert _load_ref_model(cfg).kwargs["dtype"] == "float32"
+
+
+class TestLoadTokenizer:
+    def test_repo_interpolated_and_pad_falls_back_to_eos(self):
+        tokenizer = _load_tokenizer(model_cfg())
+        assert tokenizer.repo == "fake/repo"
+        assert tokenizer.pad_token == "</s>"
+
+    def test_existing_pad_token_kept(self):
+        cfg = model_cfg()
+        cfg.model.tokenizer.pad_token = "<pad>"
+        assert _load_tokenizer(cfg).pad_token == "<pad>"
 
 
 class TestIsMainProcess:

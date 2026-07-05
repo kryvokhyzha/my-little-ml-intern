@@ -28,7 +28,11 @@ Why each row:
   the match count plus a sample of matched module types. Suffix-only matching
   silently targeted unsupported wrapper modules on Gemma-4's multi-tower
   architecture (verified failure); explicit `model.language_model.layers.*`
-  projection matching fixed it.
+  projection matching fixed it. `google/gemma-4-E2B-it` is a multi-tower
+  `Gemma4ForConditionalGeneration` — set `target_modules` to the language-tower
+  regex (or omit it to use PEFT's gemma4 default `q_proj`/`v_proj`);
+  `all-linear` attaches adapters to the vision/audio towers (experiment
+  001-pi-mono-sft).
 - **Keep `lora_alpha` fixed, tune `r`.** The 1/r scaling in W' = W +
   (alpha/r)·B·A makes the optimal LR approximately rank-independent — never
   scale alpha with rank.
@@ -55,18 +59,13 @@ when the dataset outgrows the adapter.
 | post-training-scale SFT within adapter capacity    | LoRA at r=256 matches full FT at ~2/3 the FLOPs            |
 | policy-gradient RL                                 | LoRA, r=1–32                                               |
 
-## QLoRA (`trainer.quantization`)
+## QLoRA (the `_4bit` model variant)
 
-Set on top of the LoRA preset (both trl trainer groups ship
-`quantization: null`):
-
-```yaml
-quantization:
-  load_in_4bit: true
-  bnb_4bit_quant_type: nf4
-  bnb_4bit_compute_dtype: bfloat16
-  bnb_4bit_use_double_quant: true
-```
+On top of the LoRA preset, compose `model: <name>_4bit` (e.g.
+`model=gemma_4_e2b_it_4bit`) — the variant's `model.main` nests a
+`quantization_config:` node with `_target_: transformers.BitsAndBytesConfig`
+(see `configs/model/gemma_4_e2b_it_4bit.yaml`). Quantization is model identity,
+not a trainer key; a new quantized model is a new `<name>_4bit.yaml` file.
 
 - Requires bitsandbytes: run `uv sync --group gpu` on the CUDA box (remote
   lanes: compute-lanes.md ssh step 2). Missing it fails at model load with an
@@ -83,4 +82,5 @@ quantization:
   applies the adapter, so `param_drift` stays honest on plain LoRA runs.
 - `trainable_param_count` meta (requires_grad numel after trainer construction)
   is what marks a LoRA run — expect orders of magnitude below `param_count`.
-- `quantized` meta is true whenever `trainer.quantization` is set.
+- `quantized` meta is true whenever `model.main` carries a
+  `quantization_config`.

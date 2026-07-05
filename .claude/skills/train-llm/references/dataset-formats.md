@@ -55,7 +55,7 @@ curl -s 'https://datasets-server.huggingface.co/first-rows?dataset=<hub-slug>&co
 ```
 
 Also check split names (`train` is not guaranteed) and row counts — confirm
-`cfg.trainer.dataset_split` / `eval_split` exist. While you're there, audit what
+`cfg.data.dataset_split` / `eval_split` exist. While you're there, audit what
 you loaded: class imbalance, empty strings, duplicated rows, wildly long
 outliers. Looking at data is the cheapest performance win available and prevents
 failed jobs. Also verify `max_length` truncation does not cut the decisive

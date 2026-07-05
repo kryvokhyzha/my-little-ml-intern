@@ -28,6 +28,7 @@ def build_run(
     tokens_seen=900_000,
     samples=GOOD_SAMPLES,
     stderr="FutureWarning: something benign\n",
+    completion_only=None,
 ) -> MetricsLog:
     """Write a synthetic experiment dir; pass None for any piece to omit it."""
     log = MetricsLog(exp / "metrics.jsonl")
@@ -36,6 +37,7 @@ def build_run(
         ("param_count", param_count),
         ("target_params", target_params),
         ("planned_tokens", planned_tokens),
+        ("completion_only", completion_only),
     ]:
         if value is not None:
             log.append_event("meta", key=key, value=value)
@@ -93,6 +95,27 @@ def test_low_loss_red_flag_fails(tmp_path):
     assert "red flag" in result.detail
     assert verify_run(exp) == 1
     assert "VERDICT: loss_plausibility = FAIL" in (exp / "verify.md").read_text()
+
+
+def test_completion_only_skips_loss_plausibility(tmp_path):
+    exp = tmp_path / "001-demo"
+    # pi-mono scenario: completion-only eval_loss ~0.55 would red-flag FAIL under corpus-CE assumptions.
+    build_run(exp, train_loss=0.5, eval_loss=0.55, completion_only=True)
+
+    verifier = RunVerifier(exp)
+    results = verifier.run()
+    result = by_name(results)["loss_plausibility"]
+    assert result.status == "SKIP"
+    assert "assistant-target tokens" in result.detail
+    assert verifier.passed(results)
+    assert verify_run(exp) == 0
+
+
+def test_completion_only_false_meta_does_not_skip(tmp_path):
+    exp = tmp_path / "001-demo"
+    build_run(exp, train_loss=0.5, completion_only=False)  # falsey meta omitted -> normal red flag
+
+    assert by_name(RunVerifier(exp).run())["loss_plausibility"].status == "FAIL"
 
 
 def test_loss_outside_band_fails(tmp_path):

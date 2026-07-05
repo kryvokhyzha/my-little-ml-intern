@@ -50,10 +50,12 @@ def write_meta(mlog: Any, param_count: int, vocab_size: int, cfg: DictConfig) ->
     mlog.append_event("meta", key="task", value=str(OmegaConf.select(cfg, "trainer.kind")))
     mlog.append_event("meta", key="param_count", value=param_count)
     mlog.append_event("meta", key="vocab_size", value=vocab_size)
-    for key in ("target_params", "planned_tokens"):
-        value = OmegaConf.select(cfg, f"trainer.{key}")
+    for key, path in (("target_params", "model.target_params"), ("planned_tokens", "trainer.planned_tokens")):
+        value = OmegaConf.select(cfg, path)
         if value is not None:
             mlog.append_event("meta", key=key, value=value)
+    if OmegaConf.select(cfg, "trainer.args.completion_only_loss"):
+        mlog.append_event("meta", key="completion_only", value=True)
 
 
 def final_train_loss(trainer: Any) -> float | None:

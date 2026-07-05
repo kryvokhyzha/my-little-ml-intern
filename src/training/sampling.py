@@ -10,8 +10,33 @@ from typing import Any
 SAMPLE_PROMPTS = ("Once upon a time", "The weather this morning", "In a small village")
 
 
+def resolve_sample_prompts(
+    configured: Any, eval_dataset: Any, train_dataset: Any, n: int = 3
+) -> tuple[list[str], bool]:
+    """Pick generation-probe prompts: explicit config > held-out prompt column > defaults.
+
+    Returns ``(prompts, pre_rendered)``. Prompt/completion datasets carry prompts already
+    rendered in the model's chat format, so ``pre_rendered`` tells the tokenizer not to add
+    its own special tokens — a fixed raw string would probe the model off-distribution.
+    """
+    if configured:
+        return [str(p) for p in configured], False
+    for dataset in (eval_dataset, train_dataset):
+        columns = list(getattr(dataset, "column_names", None) or []) if dataset is not None else []
+        if "prompt" in columns:
+            prompts = [str(p) for p in dataset[: min(n, len(dataset))]["prompt"] if str(p).strip()]
+            if prompts:
+                return prompts, True
+    return list(SAMPLE_PROMPTS), False
+
+
 def write_samples(
-    model: Any, tokenizer: Any, experiment_dir: Path, prompts: tuple[str, ...] = SAMPLE_PROMPTS, seed: int = 42
+    model: Any,
+    tokenizer: Any,
+    experiment_dir: Path,
+    prompts: list[str] | tuple[str, ...] = SAMPLE_PROMPTS,
+    pre_rendered: bool = False,
+    seed: int = 42,
 ) -> None:
     import torch
     from loguru import logger
@@ -20,7 +45,7 @@ def write_samples(
     model.eval()
     torch.manual_seed(seed)
     for prompt in prompts:
-        inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+        inputs = tokenizer(prompt, return_tensors="pt", add_special_tokens=not pre_rendered).to(model.device)
         with torch.no_grad():
             # Sampling, not greedy: sanity samples must reflect the model's distribution;
             # greedy decode loops even on healthy models and trips the repetition check.

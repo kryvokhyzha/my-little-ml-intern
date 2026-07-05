@@ -1,14 +1,6 @@
 kind: trl_sft
-model_name: null
-dtype: float32
-sample_prompts: null
-dataset: null
-dataset_split: train
-eval_split: null
-target_params: null
 planned_tokens: null
 peft: null
-quantization: null
 args:
   output_dir: ${experiment_dir}/ckpts
   max_steps: -1

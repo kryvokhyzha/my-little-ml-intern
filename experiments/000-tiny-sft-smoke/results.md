@@ -1,12 +1,12 @@
-# Results — 001-tiny-sft-smoke
+# Results — 000-tiny-sft-smoke
 
 **Winner: path-6** — `HuggingFaceTB/SmolLM2-135M`, CPU, 10 steps, lr 5e-5, fp32.
-Final train loss 1.779; verify **PASS** (5 passed, 0 failed, 3 skipped) + generation
+Final train loss 1.779; verify **PASS** (4 passed, 0 failed, 5 skipped) + generation
 judgment PASS. Reproduce with:
 
 ```bash
-uv run python scripts/python/001-tiny-sft-smoke.py smoke_test=true   # gate: VERDICT: TRAIN_OK
-uv run python scripts/python/001-tiny-sft-smoke.py                   # ~40 s on CPU
+uv run python scripts/python/000-tiny-sft-smoke.py smoke_test=true   # gate: VERDICT: TRAIN_OK
+uv run python scripts/python/000-tiny-sft-smoke.py                   # ~40 s on CPU
 uv run python scripts/python/intern.py verify --experiment 001       # exit 0
 ```
 
@@ -28,5 +28,6 @@ uv run python scripts/python/intern.py verify --experiment 001       # exit 0
 - Sanity samples use seeded sampling, not greedy (greedy loops on healthy models).
 - `samples.jsonl` replaced blank-line-delimited samples.txt (paragraph breaks collided
   with the delimiter).
-- Sample prompts are configurable per experiment (`trainer.sample_prompts`) and must match
-  the training distribution; pangram-bait prompts removed from defaults.
+- Generation probe: raw-text data (this experiment) falls back to the built-in
+  `SAMPLE_PROMPTS`; prompt/completion data samples held-out eval prompts instead
+  (`resolve_sample_prompts`), and `data.sample_prompts` is an optional override.

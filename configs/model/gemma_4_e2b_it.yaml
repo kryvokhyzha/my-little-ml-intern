@@ -1,0 +1,8 @@
+main:
+  _target_: transformers.AutoModelForCausalLM.from_pretrained
+  _args_: ["google/gemma-4-E2B-it"]
+  dtype: bfloat16
+
+tokenizer:
+  _target_: transformers.AutoTokenizer.from_pretrained
+  _args_: ["${model.main._args_[0]}"]

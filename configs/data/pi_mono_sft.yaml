@@ -1,0 +1,4 @@
+# Materialized {prompt, completion} dataset pushed by scripts/python/prep-pi-mono-sft.py.
+path: ${oc.env:HF_USER,null}/pi-mono-sft
+dataset_split: train
+eval_split: test

@@ -26,8 +26,8 @@ Notes:
 - Keep effective batch (`per_device × grad_accum × gpus`) constant across paths;
   ~128 is a sane SFT default (LoRA paths cap it at < 32 — see lora.md).
 - The QLoRA rows are real lanes: bitsandbytes ships in the `gpu` dependency
-  group (`uv sync --group gpu` on the CUDA box) — recipe and the
-  `trainer.quantization` block live in lora.md's QLoRA subsection.
+  group (`uv sync --group gpu` on the CUDA box) — recipe and the `_4bit` model
+  variant (nested `BitsAndBytesConfig` node) live in lora.md's QLoRA subsection.
 
 ## Flash attention
 

@@ -1,0 +1,8 @@
+main:
+  _target_: transformers.AutoModelForCausalLM.from_pretrained
+  _args_: ["HuggingFaceTB/SmolLM2-135M"]
+  dtype: float32
+
+tokenizer:
+  _target_: transformers.AutoTokenizer.from_pretrained
+  _args_: ["${model.main._args_[0]}"]

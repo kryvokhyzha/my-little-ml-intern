@@ -186,6 +186,12 @@ class RunVerifier:
 
     def _check_loss_plausibility(self) -> CheckResult:
         name = "loss_plausibility"
+        if self._meta("completion_only"):
+            detail = (
+                "completion-only SFT loss (assistant-target tokens only) is not corpus cross-entropy — "
+                "band and <1.0 red-flag do not apply; rely on eval_train_gap, generation_sanity, and held-out eval"
+            )
+            return CheckResult(name, "SKIP", None, None, detail)
         task = self._task()
         if task not in _LM_TASKS:
             return CheckResult(name, "SKIP", None, None, f"task={task}: loss is not vocab cross-entropy")

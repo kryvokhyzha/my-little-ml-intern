@@ -10,9 +10,9 @@ from omegaconf import DictConfig, OmegaConf
 
 from data.loading import load_split, require_prompt_column
 
-from ..models import load_model, peft_config
+from ..models import load_model, load_ref_model, load_tokenizer, peft_config
 from ..runtime import apply_tracking_group, is_main_process, run_with_stderr_tee, smoke_enabled
-from ..sampling import SAMPLE_PROMPTS, write_samples
+from ..sampling import resolve_sample_prompts, write_samples
 from .config import apply_smoke, build_args, final_train_loss, write_meta
 from .rewards import grpo_reward_funcs
 
@@ -24,8 +24,6 @@ def _run_trl(
     dpo: bool = False,
     reward_funcs: list[Callable[..., Any]] | None = None,
 ) -> dict[str, Any]:
-    from transformers import AutoTokenizer
-
     from intern.callbacks import AlertRules, TRLAlertCallback
     from intern.metrics import MetricsLog
 
@@ -45,17 +43,12 @@ def _run_trl(
             smoke=smoke,
         )
 
-    dtype_str = OmegaConf.select(cfg, "trainer.dtype")
-    quantization = OmegaConf.select(cfg, "trainer.quantization")
-    quantization = OmegaConf.to_container(quantization, resolve=True) if quantization else None
-    tokenizer = AutoTokenizer.from_pretrained(cfg.trainer.model_name)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    model = load_model(str(cfg.trainer.model_name), dtype_str, quantization)
+    tokenizer = load_tokenizer(cfg)
+    model = load_model(cfg)
 
-    train_dataset = load_split(str(cfg.trainer.dataset), str(cfg.trainer.dataset_split))
-    eval_split = OmegaConf.select(cfg, "trainer.eval_split")
-    eval_dataset = load_split(str(cfg.trainer.dataset), str(eval_split), for_eval=True) if eval_split else None
+    train_dataset = load_split(str(cfg.data.path), str(cfg.data.dataset_split))
+    eval_split = OmegaConf.select(cfg, "data.eval_split")
+    eval_dataset = load_split(str(cfg.data.path), str(eval_split), for_eval=True) if eval_split else None
     if grpo:
         require_prompt_column(train_dataset, "train")
         if eval_dataset is not None:
@@ -84,8 +77,7 @@ def _run_trl(
         "peft_config": peft_config(cfg),
     }
     if dpo:
-        ref_model_name = OmegaConf.select(cfg, "trainer.ref_model_name")
-        kwargs["ref_model"] = load_model(str(ref_model_name), dtype_str, quantization) if ref_model_name else None
+        kwargs["ref_model"] = load_ref_model(cfg)
     if grpo:
         kwargs["reward_funcs"] = reward_funcs
     trainer = trainer_cls(**kwargs)
@@ -93,7 +85,7 @@ def _run_trl(
     if main_process:
         trainable = sum(p.numel() for p in trainer.model.parameters() if p.requires_grad)
         mlog.append_event("meta", key="trainable_param_count", value=trainable)
-        if quantization:
+        if "quantization_config" in cfg.model.main:
             mlog.append_event("meta", key="quantized", value=True)
 
     lane = "GRPO" if grpo else ("DPO" if dpo else "SFT")
@@ -101,12 +93,14 @@ def _run_trl(
     run_with_stderr_tee(trainer.train, experiment_dir)
 
     if not smoke and main_process:
-        prompts = OmegaConf.select(cfg, "trainer.sample_prompts")
+        configured = OmegaConf.select(cfg, "data.sample_prompts")
+        prompts, pre_rendered = resolve_sample_prompts(configured, eval_dataset, train_dataset)
         write_samples(
             trainer.model,
             tokenizer,
             experiment_dir,
-            prompts=tuple(prompts) if prompts else SAMPLE_PROMPTS,
+            prompts=prompts,
+            pre_rendered=pre_rendered,
             seed=int(OmegaConf.select(cfg, "seed") or 42),
         )
 

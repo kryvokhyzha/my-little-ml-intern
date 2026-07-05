@@ -1,0 +1,14 @@
+# @package _global_
+defaults:
+  - main
+  - model: gemma_4_e2b_it
+  - _self_
+
+dataset_id: badlogicgames/pi-mono
+max_length: 4096
+eval_size: 256
+include_reasoning: false
+target_repo: ${oc.env:HF_USER,null}
+private: true
+dry_run: false
+limit_sessions: null

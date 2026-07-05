@@ -1,0 +1,16 @@
+# QLoRA variant: 4-bit base load; requires bitsandbytes (`uv sync --group gpu`, CUDA-only).
+main:
+  _target_: transformers.AutoModelForCausalLM.from_pretrained
+  _args_: ["google/gemma-4-E2B-it"]
+  dtype: bfloat16
+  device_map: auto
+  quantization_config:
+    _target_: transformers.BitsAndBytesConfig
+    load_in_4bit: true
+    bnb_4bit_quant_type: nf4
+    bnb_4bit_compute_dtype: bfloat16
+    bnb_4bit_use_double_quant: true
+
+tokenizer:
+  _target_: transformers.AutoTokenizer.from_pretrained
+  _args_: ["${model.main._args_[0]}"]

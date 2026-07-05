@@ -53,10 +53,10 @@ One experiment number = three artifacts: `scripts/python/NNN-<slug>.py`,
 
 ```bash
 # 1. Smoke run first (mandatory) — must print "VERDICT: TRAIN_OK"
-uv run python scripts/python/001-tiny-sft-smoke.py smoke_test=true
+uv run python scripts/python/000-tiny-sft-smoke.py smoke_test=true
 
 # 2. Real run
-uv run python scripts/python/001-tiny-sft-smoke.py
+uv run python scripts/python/000-tiny-sft-smoke.py
 
 # 3. Blocking verification gate — results are invalid unless this exits 0
 uv run python scripts/python/intern.py verify --experiment 001
@@ -68,10 +68,11 @@ uv run python scripts/python/intern.py ledger --experiment 001 show
 uv run python scripts/python/intern.py deps
 ```
 
-Training lane, tracker, and compute target are Hydra groups — override per run:
+Model, dataset, training lane, tracker, and compute target are Hydra groups — override per run:
 
 ```bash
-uv run python scripts/python/001-tiny-sft-smoke.py trainer=trl_dpo tracking=wandb compute=ssh
+uv run python scripts/python/001-pi-mono-sft.py model=gemma_4_e2b_it data=pi_mono_sft
+uv run python scripts/python/000-tiny-sft-smoke.py trainer=trl_dpo tracking=wandb compute=ssh
 ```
 
 ## 🧰 Skills
@@ -97,16 +98,19 @@ Copy into any repo built from `llm-python-template`:
 1. `.claude/skills/` — the skill pack
 2. `src/intern/` — the enforcement library (plus the `src/helper/display` improvements)
 3. `scripts/python/intern.py` and `scripts/bash/` (notify.sh, gpu_probe.sh)
-4. `configs/` groups: `trainer/`, `tracking/`, `compute/`, `budget/`
+4. `configs/` groups: `model/`, `data/`, `trainer/`, `tracking/`, `compute/`, `budget/`
 5. the `deps-age` hook from `.pre-commit-config.yaml`
 
 Then run `uv run pytest` to confirm the gates work in place.
 
 ## 🔔 Notifications
 
-`scripts/bash/notify.sh <event> "<msg>"` pings Telegram/Slack on milestones
-(plan ready, train started/done, blockers, approvals). Set the `TG_*` / `SLACK_*`
-vars from [.env.example](.env.example); unset channels are silent no-ops.
+`scripts/bash/notify.sh <event> "<msg>" [experiment]` pings Telegram/Slack on
+milestones (plan ready, train started/done, blockers, approvals) with a
+formatted card — event emoji + label, project + experiment, your message, and a
+"next step" hint. Set the `TG_*` / `SLACK_*` vars from
+[.env.example](.env.example); unset channels are silent no-ops. Preview any
+message without sending: `NOTIFY_DRY_RUN=1 scripts/bash/notify.sh train_done "…"`.
 
 ## ⚙️ Development Environment Setup
 

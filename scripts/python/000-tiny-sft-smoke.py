@@ -19,9 +19,9 @@ from data.synthetic import build_tiny_text_dataset
 from training.trl import run_sft
 
 
-@hydra.main(version_base=None, config_path="../../configs", config_name="001-tiny-sft-smoke")
+@hydra.main(version_base=None, config_path="../../configs", config_name="000-tiny-sft-smoke")
 def main(cfg: DictConfig) -> None:
-    data_dir = Path(str(cfg.trainer.dataset))
+    data_dir = Path(str(cfg.data.path))
     if not data_dir.exists():
         build_tiny_text_dataset(data_dir, seed=int(cfg.seed))
         logger.info("Materialized toy dataset at {}", data_dir)

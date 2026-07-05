@@ -49,7 +49,7 @@ Then the budget gate:
 uv run python scripts/python/intern.py budget --experiment NNN can-launch
 ```
 
-When the path has a parameter target, pass `--params <target_params>` — the gate
+Pass `--params <model_param_count>` (the model's total parameters) — the gate
 then also enforces the `scale_ceiling_params` cap from budget.md.
 
 Exit 0 = allowed. Nonzero = **stop** — do not launch, do not "just try one quick
@@ -77,8 +77,13 @@ the experiment script — never silently substitute a dataset.
 - `trainer=axolotl` — YAML-recipe training rendered locally, executed on a
   remote box (`render(cfg)` only; axolotl is never a local dependency).
 
-- LoRA/QLoRA path (`trainer.peft` / `trainer.quantization`) → read
-  `references/lora.md` (the no-regret recipe) before setting any adapter knob.
+The trainer group carries only run mechanics. Model identity/loading — including
+QLoRA, via the `_4bit` model variant (`model=gemma_4_e2b_it_4bit`) — is the
+Hydra `model` group, and dataset identity the `data` group, never trainer keys.
+
+- LoRA/QLoRA path (`trainer.peft` for the adapter; QLoRA composes the `_4bit`
+  model variant) → read `references/lora.md` (the no-regret recipe) before
+  setting any adapter knob.
 - Pretraining or continued pretraining → read `references/pretraining.md`.
 - Choosing `trainer.args` for a new path → read
   `references/hyperparameter-priors.md` for defensible starting values.
@@ -115,7 +120,7 @@ says what a launch takes on each). Then:
 ```bash
 uv run python scripts/python/intern.py budget --experiment NNN record-launch
 uv run python scripts/python/intern.py ledger --experiment NNN upsert --path-id path-1 --status running --approach "<one line>"
-scripts/bash/notify.sh train_started "<paths> path(s) on <dataset> via <lane>"
+scripts/bash/notify.sh train_started "<paths> path(s) on <dataset> via <lane>" NNN-<slug>
 ```
 
 For multi-path plans: launch ONE path first, confirm it trains (loss lines

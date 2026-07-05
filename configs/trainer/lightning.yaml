@@ -1,7 +1,6 @@
 kind: lightning
 module: null
 datamodule: null
-target_params: null
 planned_tokens: null
 args:
   max_steps: 1000

@@ -99,7 +99,7 @@ Not published = not shipped: for a shipping request, `train_done` fires only
 once the publish gate exited 0.
 
 ```bash
-scripts/bash/notify.sh train_done "published <repo-id> for NNN-<slug>"
+scripts/bash/notify.sh train_done "published <repo-id>" NNN-<slug>
 ```
 
 On refusal (exit 1/2) fire `scripts/bash/notify.sh error "<one-line cause>"`

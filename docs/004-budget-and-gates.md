@@ -23,7 +23,7 @@ Caps cut both ways:
 ## budget.md anatomy
 
 Each experiment carries its own
-[budget.md](../experiments/001-tiny-sft-smoke/budget.md), scaffolded from a
+[budget.md](../experiments/000-tiny-sft-smoke/budget.md), scaffolded from a
 budget config group and parsed by `intern.budget`:
 
 ```text
@@ -108,7 +108,7 @@ uv run python scripts/python/intern.py deps [--min-age-days 7]
 ## The verify gate
 
 `verify` runs eight checks against the experiment's artifacts and writes
-[verify.md](../experiments/001-tiny-sft-smoke/verify.md) (`VERDICT:` line per
+[verify.md](../experiments/000-tiny-sft-smoke/verify.md) (`VERDICT:` line per
 check, `OVERALL:` line at the end). One line each:
 
 | #   | check               | FAIL when                                                                                                                          |
@@ -117,7 +117,7 @@ check, `OVERALL:` line at the end). One line each:
 | 2   | `eval_train_gap`    | \|final eval loss − final train loss\| ≥ 0.5 (eval = `loss(split=eval)`, `eval_loss`, or `val_loss`)                               |
 | 3   | `data_consumption`  | final `num_input_tokens_seen` < 0.7 × `planned_tokens`                                                                             |
 | 4   | `stderr_scan`       | `Traceback` / `RuntimeError` / `CUDA out of memory` in logs/stderr.log (warnings listed but PASS)                                  |
-| 5   | `param_drift`       | \|`param_count` − `target_params`\| > 15%                                                                                          |
+| 5   | `param_drift`       | opt-in (SKIP unless the experiment sets `model.target_params`): \|`param_count` − `target_params`\| > 15%                          |
 | 6   | `generation_sanity` | logs/samples.jsonl: unique-token ratio < 0.3, one token > 50% of output, a sample < 50 chars — or the file is absent on an LM task |
 | 7   | `reward_margin`     | (auto when DPO metrics present) final `rewards/margins` ≤ 0                                                                        |
 | 8   | `kl_ref`            | (auto when KL metrics present) mean KL non-finite or ≤ 0                                                                           |
@@ -153,7 +153,7 @@ the generation samples is mandatory before any success claim.
 
 ## Ledger semantics
 
-[ledger.md](../experiments/001-tiny-sft-smoke/ledger.md) is a markdown table
+[ledger.md](../experiments/000-tiny-sft-smoke/ledger.md) is a markdown table
 managed by `intern.ledger` — one row per path, columns exactly:
 
 ```text

@@ -7,7 +7,7 @@ stop and complete it. (Smoke-scale and `999-` scratch runs are exempt.)
 ```
 PRE-FLIGHT — NNN-<slug> / path-<id>
 - Reference implementation: <URL or research.md row this run is based on>
-- Dataset format verified: <dataset slug> — columns <...> match <method>
+- Dataset format verified: cfg.data.path=<value> — columns <...> match <method>
   (how: datasets load / datasets-server; see dataset-formats.md)
 - Smoke run: VERDICT: TRAIN_OK | final_train_loss=<v>  (paste the actual line)
 - Trainer lane: trainer=<trl_sft|trl_dpo|lightning|axolotl>, override: <the one Hydra override for this path>

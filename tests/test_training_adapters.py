@@ -14,6 +14,7 @@ from training.runtime import smoke_enabled as _smoke_enabled
 from training.trl.config import apply_smoke as _apply_smoke
 from training.trl.config import build_args as _build_args
 from training.trl.config import report_to as _report_to
+from training.trl.config import write_meta as _write_meta
 from training.trl.rewards import grpo_reward_funcs as _grpo_reward_funcs
 from training.trl.rewards import resolve_reward_funcs as _resolve_reward_funcs
 
@@ -108,6 +109,48 @@ class TestBuildArgs:
         cfg.tracking = OmegaConf.create({"backend": "none"})
         args = _build_args(cfg, SFTConfig)
         assert args.report_to == []
+
+
+class FakeMetricsLog:
+    def __init__(self):
+        self.events = []
+
+    def append_event(self, event, **fields):
+        self.events.append({"event": event, **fields})
+
+    def meta(self, key):
+        for record in reversed(self.events):
+            if record.get("event") == "meta" and record.get("key") == key:
+                return record.get("value")
+        return None
+
+
+class TestWriteMeta:
+    def _cfg(self, args=None, target_params=None):
+        return OmegaConf.create(
+            {"trainer": {"kind": "trl_sft", "args": args or {}}, "model": {"target_params": target_params}}
+        )
+
+    def test_completion_only_meta_emitted_when_flag_set(self):
+        log = FakeMetricsLog()
+        _write_meta(log, param_count=124, vocab_size=32000, cfg=self._cfg({"completion_only_loss": True}))
+        assert log.meta("completion_only") is True
+
+    def test_completion_only_meta_absent_when_flag_unset(self):
+        log = FakeMetricsLog()
+        _write_meta(log, param_count=124, vocab_size=32000, cfg=self._cfg({"completion_only_loss": False}))
+        assert log.meta("completion_only") is None
+        _write_meta(FakeMetricsLog(), param_count=124, vocab_size=32000, cfg=self._cfg())
+
+    def test_target_params_from_model_group(self):
+        log = FakeMetricsLog()
+        _write_meta(log, param_count=124, vocab_size=32000, cfg=self._cfg(target_params=135000000))
+        assert log.meta("target_params") == 135000000
+
+    def test_target_params_absent_when_null(self):
+        log = FakeMetricsLog()
+        _write_meta(log, param_count=124, vocab_size=32000, cfg=self._cfg())
+        assert log.meta("target_params") is None
 
 
 class TestResolveRewardFuncs:

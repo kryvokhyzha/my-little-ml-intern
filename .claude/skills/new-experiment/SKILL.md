@@ -17,7 +17,7 @@ One experiment number = three artifacts, created together:
 
 ```
 scripts/python/NNN-<slug>.py      # hydra entrypoint (new-script scaffold + src import)
-configs/NNN-<slug>.yaml           # composes main + trainer/tracking/compute/budget
+configs/NNN-<slug>.yaml           # composes main + model/data/trainer/tracking/compute/budget
 experiments/NNN-<slug>/           # task.md, plan.md, budget.md, ledger.md
 ```
 
@@ -74,6 +74,8 @@ once — from then on all gates apply.
 
 defaults:
   - main
+  - model: <pick> # smollm2_135m | gemma_4_e2b_it | gemma_4_e2b_it_4bit
+  - data: <pick> # tiny_synthetic | pi_mono_sft
   - trainer: trl_sft
   - tracking: trackio
   - compute: local
@@ -83,12 +85,19 @@ defaults:
 experiment_name: NNN-<slug>
 ```
 
-Swap a group pick only when the task calls for it: `trainer` ∈
-`trl_sft|trl_dpo|lightning|axolotl`, `tracking` ∈ `trackio|wandb|none`,
-`compute` ∈ `local|ssh|modal|vast|hf_jobs` (see `configs/*/`). Set concrete
-overrides under `_self_` (e.g. `trainer.model_name`, `trainer.dataset`) only
-when actually known — don't invent values. Tracking backend is never hardcoded
-in code; adapters read `cfg.tracking.backend`.
+Swap a group pick only when the task calls for it: `model` ∈
+`smollm2_135m|gemma_4_e2b_it|gemma_4_e2b_it_4bit`, `data` ∈
+`tiny_synthetic|pi_mono_sft`, `trainer` ∈
+`trl_sft|trl_sft_lora|trl_dpo|trl_grpo|lightning|axolotl`, `tracking` ∈
+`trackio|wandb|none`, `compute` ∈ `local|ssh|modal|vast|hf_jobs` (see
+`configs/*/`). Model identity lives in the `model` group and dataset identity in
+the `data` group — never invent values by typing raw repo ids or dataset slugs
+into trainer keys; override the `model:`/`data:` pick instead. A new model or
+dataset is a one-file addition (`configs/model/<name>.yaml` /
+`configs/data/<name>.yaml`) following the `_target_` pattern in
+`docs/001-architecture.md` ("Config groups"). Set other concrete overrides under
+`_self_` only when actually known. Tracking backend is never hardcoded in code;
+adapters read `cfg.tracking.backend`.
 
 ### 4. Create the script
 
@@ -267,7 +276,7 @@ failed gate means the run failed, regardless of loss.
 
 - [ ] `scripts/python/NNN-<slug>.py` exists — new-script scaffold + `sys.path`
       src insert + `cfg.trainer.kind` dispatch.
-- [ ] `configs/NNN-<slug>.yaml` exists and composes the five groups + `_self_`
+- [ ] `configs/NNN-<slug>.yaml` exists and composes the six groups + `_self_`
       with `experiment_name` set;
       `uv run python scripts/python/NNN-<slug>.py     --cfg job` exits 0.
 - [ ] `experiments/NNN-<slug>/` contains task.md, plan.md, budget.md, ledger.md

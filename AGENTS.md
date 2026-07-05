@@ -50,7 +50,7 @@ The full contract (module APIs, artifact formats, skill conventions) lives in
 ## Repository layout
 
 ```
-configs/        # Hydra configs: main.yaml + groups (hydra/, trainer/, tracking/, compute/, budget/)
+configs/        # Hydra configs: main.yaml + groups (hydra/, model/, data/, trainer/, tracking/, compute/, budget/)
 scripts/        # python/ (incl. intern.py CLI) and bash/ (notify.sh, gpu_probe.sh)
 src/            # Importable package code
   helper/       # display/ (rich) and logging/ (LoggerConfig singleton) — template-generic

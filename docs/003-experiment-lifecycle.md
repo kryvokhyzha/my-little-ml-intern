@@ -1,15 +1,20 @@
 # 003 — Experiment lifecycle
 
 <!-- Worked walkthrough of the full gate chain — scaffold → budget → smoke → train →
-verify → results → publish — using the committed experiments/001-tiny-sft-smoke as the
+verify → results → publish — using the committed experiments/000-tiny-sft-smoke as the
 specimen. The contract lives in docs/001-architecture.md; this doc shows it in motion. -->
 
 This is a guided tour of one real experiment,
-[experiments/001-tiny-sft-smoke](../experiments/001-tiny-sft-smoke/task.md).
+[experiments/000-tiny-sft-smoke](../experiments/000-tiny-sft-smoke/task.md).
 Every artifact referenced here is committed; you can open each file as you read.
 The experiment took **six paths** to pass its own verification gate, and that is
 the point: five of the six runs produced a loss number that looked fine, and the
 gates failed them anyway.
+
+`000-tiny-sft-smoke` is the repo's plumbing self-test fixture — the `000-`
+prefix marks it as a fixture, not a task; real task examples start at `001` (the
+`gemma-4-E2B-it` pi-mono QLoRA SFT run, walked through in
+[docs/007-example-pi-mono-sft.md](007-example-pi-mono-sft.md)).
 
 ## 1. The triple
 
@@ -17,22 +22,22 @@ One experiment number = three artifacts, created together by the
 `new-experiment` skill:
 
 ```text
-scripts/python/001-tiny-sft-smoke.py    # hydra entrypoint, dispatches on cfg.trainer.kind
-configs/001-tiny-sft-smoke.yaml         # composes main + trainer/tracking/compute/budget
-experiments/001-tiny-sft-smoke/         # task.md, plan.md, budget.md, ledger.md + run artifacts
+scripts/python/000-tiny-sft-smoke.py    # hydra entrypoint, dispatches on cfg.trainer.kind
+configs/000-tiny-sft-smoke.yaml         # composes main + trainer/tracking/compute/budget
+experiments/000-tiny-sft-smoke/         # task.md, plan.md, budget.md, ledger.md + run artifacts
 ```
 
-See [the script](../scripts/python/001-tiny-sft-smoke.py) and
-[the config](../configs/001-tiny-sft-smoke.yaml). Nothing trains outside a
+See [the script](../scripts/python/000-tiny-sft-smoke.py) and
+[the config](../configs/000-tiny-sft-smoke.yaml). Nothing trains outside a
 numbered triple (`999-` scratch is the only gate-exempt exception).
 
 ## 2. task.md and plan.md — the hypothesis contract
 
-[task.md](../experiments/001-tiny-sft-smoke/task.md) restates the task, lists
+[task.md](../experiments/000-tiny-sft-smoke/task.md) restates the task, lists
 unknowns, and fixes the run mode (interactive vs headless — this decides whether
 gates ask a human or fire `notify.sh approval_required` and proceed).
 
-[plan.md](../experiments/001-tiny-sft-smoke/plan.md) carries the hypothesis
+[plan.md](../experiments/000-tiny-sft-smoke/plan.md) carries the hypothesis
 contract: every hypothesis needs a `mechanism`, a numeric `expected_delta`, and
 a `falsification` — what result kills it. 001's actual hypothesis, verbatim:
 
@@ -72,7 +77,7 @@ Caps, the spent tally, and retry-tree accounting are explained in
 Mandatory before any long run, no exceptions:
 
 ```bash
-uv run python scripts/python/001-tiny-sft-smoke.py smoke_test=true
+uv run python scripts/python/000-tiny-sft-smoke.py smoke_test=true
 ```
 
 `smoke_test=true` (or env `SMOKE_TEST=1`) changes three things: `max_steps=1`,
@@ -85,7 +90,7 @@ VERDICT: TRAIN_OK | final_train_loss=3.6047
 
 `VERDICT: TRAIN_FAIL | <cause>` → fix the cause and re-smoke. Launching a long
 run on a failed or skipped smoke is a workflow violation. In 001's
-[metrics.jsonl](../experiments/001-tiny-sft-smoke/metrics.jsonl) you can see the
+[metrics.jsonl](../experiments/000-tiny-sft-smoke/metrics.jsonl) you can see the
 smoke run (`"smoke": true` at 15:17:50) eleven seconds before the real run
 (`"smoke": false` at 15:18:01).
 
@@ -125,7 +130,7 @@ contains all its history; only the tail after the last `run_start` was judged.
 
 This is the heart of the lifecycle — a real demonstration that **a low loss
 number is never evidence the model works**. Each row of
-[ledger.md](../experiments/001-tiny-sft-smoke/ledger.md) is a one-variable
+[ledger.md](../experiments/000-tiny-sft-smoke/ledger.md) is a one-variable
 mutation of its parent (`retry_of` lineage), each failure has a postmortem
 (symptom → root-cause hypothesis → fix), and each was killed by a specific gate,
 not by a human squinting at a curve.
@@ -136,7 +141,7 @@ final loss 10.587 — inside the ln(vocab) plausibility band. Verify exit 1:
 token ("factors" = 96–97% of output). The checkpoint was a randomly-initialized
 ~100k-param test model that cannot learn language at any step count; loss barely
 moved (10.61 → 10.59) yet looked fine in isolation.
-[postmortems/path-1.md](../experiments/001-tiny-sft-smoke/postmortems/path-1.md).
+[postmortems/path-1.md](../experiments/000-tiny-sft-smoke/postmortems/path-1.md).
 Fix: a genuinely pretrained model, `EleutherAI/pythia-14m`.
 
 **path-2 — the "best" loss of the whole experiment: 0.0.** pythia-14m at lr 5e-4
@@ -146,7 +151,7 @@ rule** (loss < 1.0 on an LM task is a FAIL even when vocab size is unknown) plus
 `generation_sanity` (empty continuations). Side finding: the NaN alert watched
 the loss value, which reported 0.0 rather than NaN — `grad_norm` is now watched
 too.
-[postmortems/path-2.md](../experiments/001-tiny-sft-smoke/postmortems/path-2.md).
+[postmortems/path-2.md](../experiments/000-tiny-sft-smoke/postmortems/path-2.md).
 Fix: the canonical divergence mutation, lr 5e-4 → 5e-5.
 
 **path-3 — the hypothesis dies, the real bug surfaces.** Identical NaN
@@ -155,15 +160,16 @@ exactly what the falsification field is for. Bisecting the adapter found the
 root cause: the pythia-14m checkpoint is stored in fp16 and transformers v5
 loads checkpoints in their **stored dtype** by default → full-precision fp16
 AdamW → divergence on MPS, `RuntimeError: mixed dtype (CPU)` on CPU.
-[postmortems/path-3.md](../experiments/001-tiny-sft-smoke/postmortems/path-3.md).
-Fix in code, not config: `trainer.dtype: float32` became the adapter default.
+[postmortems/path-3.md](../experiments/000-tiny-sft-smoke/postmortems/path-3.md).
+Fix in code, not config: the model loader now injects `dtype: float32` (with a
+warning) when `model.main` carries neither `dtype` nor `quantization_config`.
 
 **path-4 — fixed the bug, found two more truths.** With fp32, no NaN — but on
 MPS the loss _rose_ 4.48 → 7.29 (GPTNeoX numerics are broken on MPS even in
 fp32; `generation_sanity` FAIL). The healthy CPU rerun then failed verify too:
 40 steps memorized the tiny 5-template corpus, final loss 0.60 — red-flag FAIL
 again, this time the check working as designed on a toy task.
-[postmortems/path-4.md](../experiments/001-tiny-sft-smoke/postmortems/path-4.md).
+[postmortems/path-4.md](../experiments/000-tiny-sft-smoke/postmortems/path-4.md).
 Fix: `use_cpu: true` and `max_steps: 10`.
 
 **path-5 — four checks pass, the fifth says no.** CPU, 10 steps, loss 1.671 —
@@ -172,7 +178,7 @@ repeated token ("night" = 66% of output). A 14M model fine-tuned on a templated
 corpus has a real degeneracy attractor; the check correctly reported partial
 distribution collapse. A samples-format bug (blank-line-delimited samples.txt)
 was found and fixed along the way — `samples.jsonl` replaced it.
-[postmortems/path-5.md](../experiments/001-tiny-sft-smoke/postmortems/path-5.md).
+[postmortems/path-5.md](../experiments/000-tiny-sft-smoke/postmortems/path-5.md).
 Fix: `HuggingFaceTB/SmolLM2-135M`.
 
 **path-6 — green, end to end.** SmolLM2-135M, CPU, 10 steps, lr 5e-5, fp32.
@@ -186,7 +192,7 @@ path-1 (10.587). The _winner is fourth_. Every run above it was broken in a way
 the loss could not show — NaN collapse, memorization, degenerate generations.
 That is what the gates are for.
 
-One budget footnote: [budget.md](../experiments/001-tiny-sft-smoke/budget.md)
+One budget footnote: [budget.md](../experiments/000-tiny-sft-smoke/budget.md)
 records `retries_used: 5` against `max_retries_per_path: 2` — this interactive,
 human-supervised pipeline shakedown ran past the default caps, and the tally
 shows it. That overrun being _visible_ is the point of CLI-only spend
@@ -198,7 +204,7 @@ accounting. Headless, the gate's denial is final: postmortem, notify, stop.
 uv run python scripts/python/intern.py verify --experiment 001   # exit 0/1/2
 ```
 
-A full run writes [verify.md](../experiments/001-tiny-sft-smoke/verify.md) — one
+A full run writes [verify.md](../experiments/000-tiny-sft-smoke/verify.md) — one
 machine-greppable line per check plus an `OVERALL:` line:
 
 ```text
@@ -209,7 +215,7 @@ OVERALL: PASS (5 passed, 0 failed, 3 skipped)
 
 Mechanical PASS is necessary, not sufficient. The verify-run skill then requires
 a human read of
-[logs/samples.jsonl](../experiments/001-tiny-sft-smoke/logs/samples.jsonl) — is
+[logs/samples.jsonl](../experiments/000-tiny-sft-smoke/logs/samples.jsonl) — is
 this recognizable language for the training distribution? — recorded as one
 appended line:
 
@@ -225,7 +231,7 @@ thresholds, task-awareness, and exit codes are catalogued in
 
 Forbidden unless verify exited 0 (and the judgment passed). Only then, after the
 ledger row is updated to `--status passed --verify pass`, write
-[results.md](../experiments/001-tiny-sft-smoke/results.md): the winner, exact
+[results.md](../experiments/000-tiny-sft-smoke/results.md): the winner, exact
 reproduce commands, the path comparison table, and — the highest-value section
 of 001 — the lessons folded back into the repo (the fp32 default, the
 MPS/GPTNeoX warning, seeded sampling for sanity generations).
