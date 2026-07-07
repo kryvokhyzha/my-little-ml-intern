@@ -20,15 +20,21 @@ def smoke_enabled(cfg: DictConfig) -> bool:
     return bool(OmegaConf.select(cfg, "smoke_test")) or os.environ.get("SMOKE_TEST") == "1"
 
 
-def apply_tracking_group(cfg: DictConfig) -> None:
-    group = OmegaConf.select(cfg, "tracking.group")
-    if group is None:
+def apply_tracking_env(cfg: DictConfig) -> None:
+    """Map tracking config onto the env vars the wandb callback reads; trackio takes kwargs instead."""
+    if OmegaConf.select(cfg, "tracking.backend") != "wandb":
+        # trackio: transformers' TrackioCallback takes project via TrainingArguments.project
+        # (build_args forwards it) and never passes group — Lightning wires trackio directly.
         return
-    if OmegaConf.select(cfg, "tracking.backend") == "wandb":
+    project = OmegaConf.select(cfg, "tracking.project")
+    if project is not None:
+        # transformers' WandbCallback reads only WANDB_PROJECT (default "huggingface"); the
+        # resolved config value already honors a WANDB_PROJECT env override via interpolation.
+        os.environ["WANDB_PROJECT"] = str(project)
+    group = OmegaConf.select(cfg, "tracking.group")
+    if group is not None:
         # wandb.init reads WANDB_RUN_GROUP; transformers' wandb callback has no group kwarg.
         os.environ.setdefault("WANDB_RUN_GROUP", str(group))
-    # trackio: transformers' TrackioCallback never passes group to trackio.init — wandb here, Lightning lane wires
-    # trackio grouping directly.
 
 
 class StderrTee(io.TextIOBase):

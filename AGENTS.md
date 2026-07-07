@@ -237,14 +237,17 @@ The full read surface, grouped as in `.env.example`:
 - **Training**: `SMOKE_TEST` (forces the smoke gate in the training adapters),
   `TOKENIZERS_PARALLELISM`; optional: `PYTORCH_ENABLE_MPS_FALLBACK`,
   `CUDA_VISIBLE_DEVICES`.
-- **trackio**: optional `TRACKIO_DIR` (local metrics DB location, defaults to
-  `$HF_HOME/trackio`); HF Space sync is configured via `tracking.space_id` in
-  configs (created private), not env.
+- **trackio**: optional `TRACKIO_PROJECT` (project name; defaults to
+  `project_name` from `configs/main.yaml` via config interpolation),
+  `TRACKIO_DIR` (local metrics DB location, defaults to `$HF_HOME/trackio`); HF
+  Space sync is configured via `tracking.space_id` in configs (created private),
+  not env.
 - **wandb**: `WANDB_API_KEY` (only when `tracking=wandb`); optional:
-  `WANDB_MODE`, `WANDB_DIR`.
+  `WANDB_PROJECT` (project name; defaults to `project_name` from
+  `configs/main.yaml` via config interpolation), `WANDB_MODE`, `WANDB_DIR`.
 - **Notifications** (`scripts/bash/notify.sh`; all optional, per-channel no-op):
   `TG_BOT_TOKEN`, `TG_CHAT_ID`, `SLACK_WEBHOOK_URL`, `SLACK_BOT_TOKEN`,
-  `SLACK_CHANNEL_ID`.
+  `SLACK_CHANNEL_ID`; `PROJECT_NAME` overrides the project label on the cards.
 
 ## Project skills
 

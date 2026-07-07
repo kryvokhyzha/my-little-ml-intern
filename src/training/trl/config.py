@@ -48,6 +48,11 @@ def build_args(cfg: DictConfig, cls: type, **overrides: Any) -> Any:
     run_name = OmegaConf.select(cfg, "tracking.run_name")
     if run_name is not None:
         d["run_name"] = run_name
+    project = OmegaConf.select(cfg, "tracking.project")
+    if project is not None:
+        # transformers' TrackioCallback logs under TrainingArguments.project (default
+        # "huggingface") — without this, TRL-lane trackio runs ignore tracking.project.
+        d.setdefault("project", str(project))
     space_id = OmegaConf.select(cfg, "tracking.space_id")
     if space_id is not None:
         d["trackio_space_id"] = str(space_id)

@@ -1,5 +1,6 @@
 backend: wandb
-project: ${project_name}
+# WANDB_PROJECT env overrides; defaults to project_name from configs/main.yaml.
+project: ${oc.env:WANDB_PROJECT,${project_name}}
 run_name: ${experiment_name}
 entity: null
 # Clusters related runs on the dashboard; maps to the WANDB_RUN_GROUP env var.

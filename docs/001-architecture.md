@@ -283,7 +283,9 @@ A low loss number is never evidence the model works.
 Layout: `training/trl/` is the TRL subpackage (`rewards.py`, `config.py`,
 `run.py`; `run_sft`/`run_dpo`/`run_grpo` re-exported from `training.trl`).
 Framework-neutral plumbing is shared, not owned by a lane: `training/runtime.py`
-(stderr tee, `is_main_process`, `smoke_enabled`, `apply_tracking_group`),
+(stderr tee, `is_main_process`, `smoke_enabled`, `apply_tracking_env` — maps
+`tracking.project`/`tracking.group` onto `WANDB_PROJECT`/`WANDB_RUN_GROUP` for
+the wandb callback; trackio takes `TrainingArguments.project` via `build_args`),
 `training/models.py` (`load_model` with dtype/quant, `peft_config`),
 `training/sampling.py` (`SAMPLE_PROMPTS`, `write_samples`). Dataset loading
 lives in `data/` (`data.loading.load_split` / `validate_columns`,

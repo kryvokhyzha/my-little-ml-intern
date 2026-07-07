@@ -11,8 +11,9 @@
 > (`001-pi-mono-sft`) and a full set of gates so you can see the loop end-to-end,
 > then make it yours. Two ways to adopt it:
 >
-> - **Fork it** as the starting point for your own experiments — replace the
->   `<!-- template: … -->` sections below, drop in your `configs/`, and go.
+> - **Fork it** as the starting point for your own experiments — follow the
+>   step-by-step [template adoption guide](docs/006-template-adoption.md)
+>   (rename map, example pruning, README checklist).
 > - **Vendor the pack** into an existing project — copy `.claude/skills/` and
 >   `src/intern/` (see [Vendoring into your project](#-vendoring-into-your-project)).
 >
@@ -156,11 +157,13 @@ message without sending: `NOTIFY_DRY_RUN=1 scripts/bash/notify.sh train_done "�
    ```bash
    make uv_create_venv
    ```
+
 4. Install dependencies:
 
    ```bash
    make uv_install_deps
    ```
+
 5. Copy `.env.example` to `.env` and fill in tokens (`HF_TOKEN`, optional
    `WANDB_API_KEY`, notification tokens).
 6. Install pre-commit hooks:

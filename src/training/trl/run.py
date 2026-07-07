@@ -11,7 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 from data.loading import validate_columns
 
 from ..models import load_model, load_ref_model, load_tokenizer, peft_config
-from ..runtime import apply_tracking_group, is_main_process, run_with_stderr_tee, smoke_enabled
+from ..runtime import apply_tracking_env, is_main_process, run_with_stderr_tee, smoke_enabled
 from ..sampling import resolve_sample_prompts, write_samples
 from .config import apply_smoke, build_args, final_train_loss, write_meta
 from .rewards import grpo_reward_funcs
@@ -70,7 +70,7 @@ def _run_trl(
     if eval_dataset is not None and str(OmegaConf.select(cfg, "trainer.args.eval_strategy") or "no") == "no":
         smoke_overrides.setdefault("eval_strategy", "steps")
         logger.info("data.eval is set but eval_strategy='no' — overriding to 'steps' so eval actually runs")
-    apply_tracking_group(cfg)
+    apply_tracking_env(cfg)
     args = build_args(cfg, config_cls, **smoke_overrides)
 
     callback = TRLAlertCallback(mlog, str(cfg.tracking.backend), AlertRules())

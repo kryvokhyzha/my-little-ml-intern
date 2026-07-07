@@ -10,7 +10,7 @@ from data.loading import load_split as _load_split
 from data.loading import validate_columns as _validate_columns
 from training import axolotl_adapter
 from training.lightning_adapter import TrackioLightningLogger, _build_logger
-from training.runtime import apply_tracking_group as _apply_tracking_group
+from training.runtime import apply_tracking_env as _apply_tracking_env
 from training.runtime import smoke_enabled as _smoke_enabled
 from training.trl.config import apply_smoke as _apply_smoke
 from training.trl.config import build_args as _build_args
@@ -127,6 +127,22 @@ class TestBuildArgs:
         cfg.trainer.args.bf16 = False
         args = _build_args(cfg, SFTConfig)
         assert args.bf16 is False
+
+    def test_tracking_project_reaches_trackio_field(self, cfg):
+        # TrackioCallback logs under TrainingArguments.project (default "huggingface").
+        from trl import SFTConfig
+
+        cfg.tracking.project = "my-proj"
+        args = _build_args(cfg, SFTConfig)
+        assert args.project == "my-proj"
+
+    def test_explicit_args_project_wins(self, cfg):
+        from trl import SFTConfig
+
+        cfg.tracking.project = "from-tracking"
+        cfg.trainer.args.project = "explicit"
+        args = _build_args(cfg, SFTConfig)
+        assert args.project == "explicit"
 
 
 class FakeMetricsLog:
@@ -269,29 +285,39 @@ class TestLoadSplit:
             _load_data_node(node, for_eval=True)
 
 
-class TestApplyTrackingGroup:
+class TestApplyTrackingEnv:
     @pytest.fixture(autouse=True)
     def isolated_environ(self, monkeypatch):
-        env = {key: value for key, value in os.environ.items() if key != "WANDB_RUN_GROUP"}
+        env = {k: v for k, v in os.environ.items() if k not in ("WANDB_RUN_GROUP", "WANDB_PROJECT")}
         monkeypatch.setattr(os, "environ", env)
 
     def test_wandb_backend_sets_env(self):
-        cfg = OmegaConf.create({"tracking": {"backend": "wandb", "group": "exp-042"}})
-        _apply_tracking_group(cfg)
+        cfg = OmegaConf.create({"tracking": {"backend": "wandb", "group": "exp-042", "project": "my-proj"}})
+        _apply_tracking_env(cfg)
         assert os.environ["WANDB_RUN_GROUP"] == "exp-042"
+        assert os.environ["WANDB_PROJECT"] == "my-proj"
 
-    def test_existing_env_wins(self):
+    def test_existing_group_env_wins(self):
         os.environ["WANDB_RUN_GROUP"] = "keep-me"
-        _apply_tracking_group(OmegaConf.create({"tracking": {"backend": "wandb", "group": "new"}}))
+        _apply_tracking_env(OmegaConf.create({"tracking": {"backend": "wandb", "group": "new"}}))
         assert os.environ["WANDB_RUN_GROUP"] == "keep-me"
 
-    def test_trackio_backend_skips_env(self):
-        _apply_tracking_group(OmegaConf.create({"tracking": {"backend": "trackio", "group": "g"}}))
-        assert "WANDB_RUN_GROUP" not in os.environ
+    def test_resolved_project_overwrites_env(self):
+        # The config value already honors a WANDB_PROJECT env override via interpolation,
+        # so the resolved config is authoritative here.
+        os.environ["WANDB_PROJECT"] = "stale"
+        _apply_tracking_env(OmegaConf.create({"tracking": {"backend": "wandb", "project": "resolved"}}))
+        assert os.environ["WANDB_PROJECT"] == "resolved"
 
-    def test_no_group_is_noop(self):
-        _apply_tracking_group(OmegaConf.create({"tracking": {"backend": "wandb"}}))
+    def test_trackio_backend_skips_env(self):
+        _apply_tracking_env(OmegaConf.create({"tracking": {"backend": "trackio", "group": "g", "project": "p"}}))
         assert "WANDB_RUN_GROUP" not in os.environ
+        assert "WANDB_PROJECT" not in os.environ
+
+    def test_no_keys_is_noop(self):
+        _apply_tracking_env(OmegaConf.create({"tracking": {"backend": "wandb"}}))
+        assert "WANDB_RUN_GROUP" not in os.environ
+        assert "WANDB_PROJECT" not in os.environ
 
 
 class TestBuildLoggerGroup:

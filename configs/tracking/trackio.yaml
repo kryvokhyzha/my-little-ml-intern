@@ -1,5 +1,6 @@
 backend: trackio
-project: ${project_name}
+# TRACKIO_PROJECT env overrides; defaults to project_name from configs/main.yaml.
+project: ${oc.env:TRACKIO_PROJECT,${project_name}}
 run_name: ${experiment_name}
 space_id: null
 # trackio Spaces are created PUBLIC unless forced private; this repo forces private.
