@@ -6,8 +6,9 @@ takes ~15 minutes plus however long your README description takes.
 
 ## 1. Create the repo
 
-Use GitHub's "Use this template" button (or `gh repo create <name> --template
-kryvokhyzha/my-little-ml-intern`), clone it, and create the environment:
+Use GitHub's "Use this template" button (or
+`gh repo create <name> --template kryvokhyzha/my-little-ml-intern`), clone it,
+and create the environment:
 
 ```bash
 make uv_create_venv && make uv_install_deps && make pre_commit_install
@@ -27,15 +28,15 @@ uv lock   # regenerates the project name inside uv.lock — never sed the lockfi
 (Linux `sed` drops the `''` after `-i`.) What that pass touches, so you can
 review the diff consciously:
 
-| File                                        | What the name does there                                                                                        |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `pyproject.toml`                            | `[project].name` — also flows into `uv.lock` on the next `uv lock`                                              |
-| `configs/main.yaml`                         | `project_name:` — drives tracking project names, publish repo ids (`<project>-<experiment>`), notification cards |
-| `README.md`                                 | Title + CI badge URL (owner **and** repo segments)                                                               |
-| `AGENTS.md`                                 | Project-overview first line                                                                                      |
-| `docs/001-architecture.md`                  | Positioning paragraph                                                                                            |
-| `src/intern/publish.py`                     | Model-card tag + footer ("Trained with …") — `tests/test_publish.py` asserts this string; they change together   |
-| `.claude/skills/track-experiments/**`       | `trackio … --project <name>` example commands (12+ occurrences)                                                  |
+| File                                  | What the name does there                                                                                         |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `pyproject.toml`                      | `[project].name` — also flows into `uv.lock` on the next `uv lock`                                               |
+| `configs/main.yaml`                   | `project_name:` — drives tracking project names, publish repo ids (`<project>-<experiment>`), notification cards |
+| `README.md`                           | Title + CI badge URL (owner **and** repo segments)                                                               |
+| `AGENTS.md`                           | Project-overview first line                                                                                      |
+| `docs/001-architecture.md`            | Positioning paragraph                                                                                            |
+| `src/intern/publish.py`               | Model-card tag + footer ("Trained with …") — `tests/test_publish.py` asserts this string; they change together   |
+| `.claude/skills/track-experiments/**` | `trackio … --project <name>` example commands (12+ occurrences)                                                  |
 
 Then the identity files the sed can't decide for you:
 
@@ -82,17 +83,26 @@ Your own experiments then start at `001` (or the next free number) via the
 
 ## 5. README rewrite
 
-- Delete the `> [!NOTE]` template banner at the top — your repo is no longer
-  the template.
-- Replace every `<!-- template: … -->` marked section with your content: the
-  About description at minimum.
+The new README describes **your project only** — no mention of the "ML intern"
+harness, no "built from my-little-ml-intern" attribution, no template lineage.
+The machinery speaks through the workflow sections; where the repo came from is
+not part of your project's story.
+
+- Delete the `> [!NOTE]` template banner at the top — your repo is no longer the
+  template.
+- Replace every `<!-- template: … -->` marked section with your content — in
+  particular, the About section's "personal ML intern" description gets replaced
+  wholesale by what YOUR project trains and why.
+- Delete the "Vendoring into your project" section — it's template-facing
+  (people vendor from the template, not from your project).
 - Fix the CI badge (done by the sed in step 2 if your owner/repo names were
   substituted).
-- Sections worth adding for a real project: what you're training and why, the
-  datasets involved (and their privacy status), current experiment index with
-  one-line results, hardware/lanes you actually use.
-- Keep: "The loop" diagram, Skills table, Vendoring, Notifications — they
-  describe machinery you inherited unchanged.
+- Sections worth adding for a real project: the datasets involved (and their
+  privacy status), current experiment index with one-line results,
+  hardware/lanes you actually use.
+- Keep: "The loop" diagram, Skills table, Notifications — they document the
+  workflow your collaborators (and agents) will actually use, without naming its
+  origin.
 
 ## 6. Docs and agent guidance
 
