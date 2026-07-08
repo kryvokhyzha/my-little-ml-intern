@@ -131,6 +131,18 @@ For multi-path plans: launch ONE path first, confirm it trains (loss lines
 appearing, no crash in the first minutes), then launch the rest — batch
 submission multiplies a shared bug across the whole budget.
 
+**Record what you run into `experiments/NNN-<slug>/run.md`** as you run it — the
+exact, copy-pasteable commands executed on the compute instance, section by
+section (`## Prerequisite` / `## Provision` / `## Setup` / `## Train` /
+`## Benchmark` / `## Teardown`; see `docs/001-architecture.md` "run.md format").
+Fill it live, not from memory afterward: a command absent from the transcript is
+unreproducible. **Self-contained** — a reader reproduces this experiment from
+run.md alone: embed every step (including the one-time dataset-prep command),
+never cross-reference another experiment ("see 004 for the launch").
+Placeholders for anything account-specific (`<HOST>`, `<PROJECT>`, `<YOUR_IP>`);
+never paste a token — it belongs in `.env`. run.md is **ungated** — a crashed
+run still gets its commands recorded so the failure can be reproduced.
+
 ### 7. Monitor
 
 Hand off to the **track-experiments** skill for dashboards, alerts, and
@@ -160,6 +172,10 @@ hypothesis → fix), then retry only if
 path is exhausted, fire `scripts/bash/notify.sh error "<cause>"` — not
 train_done.
 
+Close out `run.md`: append any separate `## Benchmark` commands you ran and, on
+remote lanes, the `## Teardown` sequence — the instance is not torn down until
+it is in run.md and confirmed (no orphaned disks/VMs left billing).
+
 ## Done conditions
 
 - [ ] Budget gate passed before every launch; ledger has one row per path, none
@@ -170,6 +186,8 @@ train_done.
 - [ ] `experiments/NNN-<slug>/verify.md` exists with `OVERALL: PASS` for at
       least one path, and generation samples were eyeballed, not just
       mechanically checked.
+- [ ] `experiments/NNN-<slug>/run.md` holds the exact on-compute commands
+      (setup/train, plus benchmark and teardown when they applied).
 - [ ] results.md written only after verify exit 0, naming the winning path with
       the ledger comparison.
 - [ ] `notify.sh train_done` fired only after a passing verify — never for a run

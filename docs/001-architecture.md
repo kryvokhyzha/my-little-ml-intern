@@ -39,6 +39,7 @@ experiments/NNN-<slug>/
 ├── plan.md          # hypotheses + solution paths (see plan contract)
 ├── budget.md        # caps + spent tally (parsed by intern.budget)
 ├── ledger.md        # per-path ledger table (managed by intern.ledger)
+├── run.md           # exact commands run on compute (train/benchmark); ungated, filled by train-llm
 ├── research.md      # optional recipe table from literature-recipe-research
 ├── board.md         # autoresearch shared board (see board.md format)
 ├── metrics.jsonl    # gitignored: append-only metric/event stream (intern.callbacks)
@@ -115,6 +116,57 @@ Markdown table, one row per path, columns exactly:
 
 `status ∈ queued|running|passed|failed|dropped`,
 `verify ∈ pass|fail|pending|n/a`.
+
+### run.md format
+
+The copy-pasteable record of the exact commands executed **on the compute
+instance** — the reproducibility spine between `plan.md` (what to try) and
+`results.md` (what happened). Written by the `train-llm` skill as the run
+proceeds; **ungated** — recorded even when a run fails, because reproducing a
+failure needs its commands too. Placeholders in `<angle brackets>`; never inline
+a token or account-specific secret (use `<PROJECT>`, `<HOST>`, `.env`).
+
+**Self-contained.** A reader reproduces this experiment from this one file — no
+"see 004 for the command" cross-references to other experiments. Embed every
+step, including one-time local prerequisites like dataset materialization (the
+exact `scripts/python/prep-*.py` invocation) even though they run off the
+compute box. Referencing this repo's own scripts/configs by path is fine;
+pointing at another experiment's artifacts is not.
+
+```text
+# Run — NNN-<slug>
+
+## Lane
+
+compute=<local|ssh|hf_jobs|modal|vast> · instance: <e.g. 1x NVIDIA L4 24GB> · region: <if remote>
+
+## Prerequisite   (one-time, local; omit if none)
+
+<dataset materialization, e.g. `uv run python scripts/python/prep-<slug>.py` — the exact command, not a pointer>
+
+## Provision   (remote lanes only; omit for local)
+
+<instance create, IP-locked firewall, key-only SSH — mirrors compute-lanes.md>
+
+## Setup
+
+<uv sync [--group gpu], gpu_probe>
+
+## Train
+
+<smoke_test=true, budget can-launch, the real training invocation(s), record-gpu-h, verify>
+
+## Benchmark   (if a separate eval/benchmark ran; else note the inline eval)
+
+<eval-harness / benchmark commands, or "held-out eval + generation samples, run inline by the training script">
+
+## Teardown   (remote lanes only; omit for local)
+
+<instance delete, firewall/key removal, confirm no orphaned disks>
+```
+
+Sections that do not apply (Provision/Teardown on `local`) are omitted, not left
+empty. Bundled into the published model's `bundle/` by the publish gate.
 
 ### metrics.jsonl schema
 

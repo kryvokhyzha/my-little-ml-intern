@@ -36,8 +36,10 @@ uv run python scripts/python/001-pi-mono-sft.py
 uv run python scripts/python/intern.py verify --experiment 001-pi-mono-sft
 ```
 
-Trained adapter (`adapter_model.safetensors`, 48 MB) pulled from the run;
-publish with the `publish-model` skill when desired.
+The exact commands that ran on the GCP L4 (provision → setup → train →
+teardown) are in [run.md](run.md). Trained adapter
+(`adapter_model.safetensors`, 48 MB) pulled from the run; publish with the
+`publish-model` skill when desired.
 
 ## Lessons folded back into the repo
 

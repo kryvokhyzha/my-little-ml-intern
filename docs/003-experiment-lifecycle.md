@@ -24,7 +24,7 @@ One experiment number = three artifacts, created together by the
 ```text
 scripts/python/000-tiny-sft-smoke.py    # hydra entrypoint, dispatches on cfg.trainer.kind
 configs/000-tiny-sft-smoke.yaml         # composes main + trainer/tracking/compute/budget
-experiments/000-tiny-sft-smoke/         # task.md, plan.md, budget.md, ledger.md + run artifacts
+experiments/000-tiny-sft-smoke/         # task.md, plan.md, budget.md, ledger.md, run.md + run artifacts
 ```
 
 See [the script](../scripts/python/000-tiny-sft-smoke.py) and
@@ -228,14 +228,20 @@ A FAIL judgment fails the run overall even when the exit code was 0. The check
 thresholds, task-awareness, and exit codes are catalogued in
 [004-budget-and-gates.md](004-budget-and-gates.md).
 
-## 8. results.md
+## 8. run.md and results.md
 
-Forbidden unless verify exited 0 (and the judgment passed). Only then, after the
-ledger row is updated to `--status passed --verify pass`, write
-[results.md](../experiments/000-tiny-sft-smoke/results.md): the winner, exact
-reproduce commands, the path comparison table, and — the highest-value section
-of 001 — the lessons folded back into the repo (the fp32 default, the
-MPS/GPTNeoX warning, seeded sampling for sanity generations).
+As the run executes, `train-llm` records the exact commands it ran on the
+compute instance into [run.md](../experiments/000-tiny-sft-smoke/run.md) —
+provision → setup → train → benchmark → teardown. It is **ungated** (a crashed
+run still gets its commands, so the failure reproduces) and complements
+`results.md`, which is the gated write-up.
+
+results.md is forbidden unless verify exited 0 (and the judgment passed). Only
+then, after the ledger row is updated to `--status passed --verify pass`, write
+[results.md](../experiments/000-tiny-sft-smoke/results.md): the winner, the path
+comparison table, and — the highest-value section of 001 — the lessons folded
+back into the repo (the fp32 default, the MPS/GPTNeoX warning, seeded sampling
+for sanity generations).
 
 ## 9. The status dashboard
 

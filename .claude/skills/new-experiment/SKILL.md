@@ -18,7 +18,7 @@ One experiment number = three artifacts, created together:
 ```
 scripts/python/NNN-<slug>.py      # hydra entrypoint (new-script scaffold + src import)
 configs/NNN-<slug>.yaml           # composes main + model/data/trainer/tracking/compute/budget
-experiments/NNN-<slug>/           # task.md, plan.md, budget.md, ledger.md
+experiments/NNN-<slug>/           # task.md, plan.md, budget.md, ledger.md, run.md
 ```
 
 The skeletons below are the contract. Read `docs/001-architecture.md`
@@ -168,7 +168,7 @@ Rules (from the new-script skill — read it when unsure):
 
 ### 5. Create the experiment directory
 
-`experiments/NNN-<slug>/` with exactly these four files. Never create
+`experiments/NNN-<slug>/` with exactly these five files. Never create
 `results.md` or `verify.md` — those are gate outputs written later.
 
 `task.md`:
@@ -246,6 +246,12 @@ stays the single source of truth.
 | ------- | -------- | ------ | ---------------- | --------------- | ------ | ------------- | -------- | ------- | ------- |
 ```
 
+`run.md` — skeleton only; **train-llm** fills the exact on-compute commands as
+it runs them (full format: `docs/001-architecture.md` "run.md format"). Scaffold
+`# Run — NNN-<slug>` then empty `## Lane`, `## Setup`, `## Train`,
+`## Benchmark` sections (add `## Provision` / `## Teardown` only for remote
+lanes).
+
 ### 6. Verify the scaffold
 
 ```bash
@@ -287,8 +293,8 @@ failed gate means the run failed, regardless of loss.
 - [ ] `configs/NNN-<slug>.yaml` exists and composes the six groups + `_self_`
       with `experiment_name` set;
       `uv run python scripts/python/NNN-<slug>.py     --cfg job` exits 0.
-- [ ] `experiments/NNN-<slug>/` contains task.md, plan.md, budget.md, ledger.md
-      — and no results.md or verify.md.
+- [ ] `experiments/NNN-<slug>/` contains task.md, plan.md, budget.md, ledger.md,
+      run.md (skeleton) — and no results.md or verify.md.
 - [ ] Every hypothesis in plan.md has mechanism / expected_delta /
       falsification; each path is one Hydra override.
 - [ ] budget.md parses:
