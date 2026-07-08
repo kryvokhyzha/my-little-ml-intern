@@ -17,7 +17,8 @@ def _compose():
 def test_config_composes_without_hf_user(monkeypatch):
     monkeypatch.delenv("HF_USER", raising=False)
     cfg = _compose()
-    assert cfg.dataset_id == "badlogicgames/pi-mono"
+    assert cfg.data.source._target_ == "data.pi_mono.download_sessions"
+    assert cfg.data.source.dataset_id == "badlogicgames/pi-mono"
     assert cfg.private is True
     assert cfg.dry_run is False
     assert cfg.max_length == 4096

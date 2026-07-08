@@ -1,0 +1,8 @@
+# Raw upstream coding-agent session traces (badlogicgames/pi-mono) — the INPUT to
+# scripts/python/prep-pi-mono-sft.py, which converts them and pushes the trainable
+# ${HF_USER}/pi-mono-sft (see configs/data/pi_mono_sft.yaml). Not directly trainable:
+# raw session JSONL needs the data.pi_mono conversion pipeline, so this is a `source`
+# node (snapshot_download), not the train/eval load_split shape.
+source:
+  _target_: data.pi_mono.download_sessions
+  dataset_id: badlogicgames/pi-mono

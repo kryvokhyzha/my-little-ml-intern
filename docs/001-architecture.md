@@ -516,6 +516,17 @@ held-out prompts from the eval/train `prompt` column for prompt/completion data
 (rendered in the model's chat format, so `add_special_tokens=False`), else the
 built-in `SAMPLE_PROMPTS` for raw-text data.
 
+A data config that feeds a **prep** pipeline rather than a trainer uses a
+`source:` `_target_` node instead of `train:`/`eval:` — e.g.
+[`pi_mono_raw.yaml`](../configs/data/pi_mono_raw.yaml) instantiates
+`data.pi_mono.download_sessions` (raw Hub session JSONL, not
+`datasets`-loadable), which `scripts/python/prep-pi-mono-sft.py` converts and
+pushes as the trainable `pi_mono_sft`. Every dataset the repo uses — trainable
+or raw source — has a `configs/data/*.yaml` with a `_target_`; likewise every
+model in `configs/model/*.yaml` (`main:` + `tokenizer:`, plus a
+`quantization_config` node for `_4bit` QLoRA variants). Nothing loads a model or
+dataset from a hard-coded id in code.
+
 The trainer group carries only run mechanics: `kind`, `planned_tokens`, `peft`,
 `reward_funcs` (GRPO), `args`. Model identity/loading lives in `model`; dataset
 identity in `data`. `main.yaml` provides `seed`, `project_name`,

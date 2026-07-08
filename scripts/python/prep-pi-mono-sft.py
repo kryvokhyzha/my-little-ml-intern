@@ -14,8 +14,6 @@ sys.path.insert(0, str(root / "src"))
 load_dotenv(find_dotenv(), override=True)
 
 import os
-import tempfile
-from pathlib import Path
 
 from data.pi_mono import records_to_examples, sessions_to_trace_records, split_examples
 
@@ -34,24 +32,11 @@ def _resolve_owner(cfg: DictConfig) -> str:
     return str(owner).rstrip("/")
 
 
-def _download_raw(dataset_id: str) -> Path:
-    from huggingface_hub import snapshot_download
-
-    raw_dir = Path(tempfile.gettempdir()) / "prep-pi-mono-sft" / "raw"
-    snapshot_download(
-        repo_id=dataset_id,
-        repo_type="dataset",
-        allow_patterns=["*.jsonl"],
-        local_dir=str(raw_dir),
-    )
-    return raw_dir
-
-
 @hydra.main(version_base=None, config_path="../../configs", config_name="prep-pi-mono-sft")
 def main(cfg: DictConfig) -> None:
     repo_id = f"{_resolve_owner(cfg)}/pi-mono-sft"
 
-    raw_dir = _download_raw(cfg.dataset_id)
+    raw_dir = hydra.utils.instantiate(cfg.data.source)  # data.pi_mono.download_sessions(...)
     raw_files = sorted(raw_dir.glob("*.jsonl"))
     logger.info("Downloaded {} raw *.jsonl files to {}", len(raw_files), raw_dir)
 

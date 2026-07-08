@@ -69,9 +69,11 @@ then remove it in one commit:
 
 ```bash
 git rm scripts/python/001-pi-mono-sft.py scripts/python/prep-pi-mono-sft.py \
-       configs/001-pi-mono-sft.yaml configs/data/pi_mono_sft.yaml \
+       configs/001-pi-mono-sft.yaml configs/prep-pi-mono-sft.yaml \
+       configs/data/pi_mono_sft.yaml configs/data/pi_mono_raw.yaml \
        configs/model/gemma_4_e2b_it.yaml configs/model/gemma_4_e2b_it_4bit.yaml \
-       src/data/pi_mono.py tests/test_pi_mono.py docs/007-example-pi-mono-sft.md
+       src/data/pi_mono.py tests/test_pi_mono.py tests/test_prep_pi_mono_sft.py \
+       docs/007-example-pi-mono-sft.md
 git rm -r experiments/001-pi-mono-sft
 uv run pytest -q   # must stay green after the removal
 ```

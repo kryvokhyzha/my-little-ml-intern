@@ -10,12 +10,32 @@ from __future__ import annotations
 
 import hashlib
 import json
+import tempfile
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from intern.traces import TraceRecord, to_prompt_completion
+
+
+def download_sessions(dataset_id: str, allow_patterns: tuple[str, ...] = ("*.jsonl",)) -> Path:
+    """Download the raw pi-mono session traces (a Hub *dataset* repo of JSONL) to a temp dir.
+
+    The upstream is raw session JSONL, not a ``datasets``-loadable dataset — snapshot the
+    repo and hand the directory to ``sessions_to_trace_records``. Instantiate target for the
+    ``configs/data/pi_mono_raw.yaml`` source node.
+    """
+    from huggingface_hub import snapshot_download
+
+    raw_dir = Path(tempfile.gettempdir()) / "prep-pi-mono-sft" / "raw"
+    snapshot_download(
+        repo_id=dataset_id,
+        repo_type="dataset",
+        allow_patterns=list(allow_patterns),
+        local_dir=str(raw_dir),
+    )
+    return raw_dir
 
 
 KNOWN_TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
