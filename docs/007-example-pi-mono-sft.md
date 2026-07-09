@@ -32,7 +32,9 @@ This downloads the raw `*.jsonl` traces, converts every visible user / assistant
 assistant turn), filters examples over `max_length=4096`, splits `train`/`test`
 with seed 42, and pushes `${HF_USER}/pi-mono-sft` (private) to the Hub. Config:
 [configs/prep-pi-mono-sft.yaml](../configs/prep-pi-mono-sft.yaml); script:
-[scripts/python/prep-pi-mono-sft.py](../scripts/python/prep-pi-mono-sft.py).
+[scripts/python/prep-pi-mono-sft.py](../scripts/python/prep-pi-mono-sft.py). The
+full data-provenance card — pipeline diagram, format, and per-stage row counts —
+is the experiment's own [data.md](../experiments/001-pi-mono-sft/data.md).
 
 **Step 2 — run the experiment on a GPU lane:**
 

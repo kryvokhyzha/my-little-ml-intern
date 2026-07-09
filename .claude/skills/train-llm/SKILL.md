@@ -68,6 +68,11 @@ Format mismatch is the #1 training failure; validation costs seconds on CPU, a
 failed run costs GPU-hours from the budget. If mapping is needed, write it into
 the experiment script — never silently substitute a dataset.
 
+If the dataset needed **preparation** (a prep script, an in-script mapping, a
+filter/mix), document it in `experiments/NNN-<slug>/data.md` — source → target,
+a mermaid pipeline, and in/kept/split row counts (see `docs/001-architecture.md`
+"data.md format"). Datasets consumed unchanged off the Hub need no data.md.
+
 ### 3. Pick the trainer lane (Hydra `trainer` group)
 
 - `trainer=trl_sft` — default for instruction tuning / LM fine-tuning on HF

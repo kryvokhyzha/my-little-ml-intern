@@ -132,6 +132,7 @@ def experiment_dir(tmp_path: Path) -> Path:
     (experiment / "task.md").write_text("# Task\n")
     (experiment / "plan.md").write_text("# Plan\n")
     (experiment / "run.md").write_text("# Run\n\n## Train\n\nuv run python scripts/python/001-demo.py\n")
+    (experiment / "data.md").write_text("# Data\n\nsource -> target\n")
     (experiment / "results.md").write_text(RESULTS_MD)
 
     old = experiment / "ckpts" / "checkpoint-5"
@@ -195,6 +196,7 @@ def test_happy_path_uploads_model_bundle_and_card(experiment_dir: Path, fake_api
     assert bundle_upload["files"] == [
         "001-demo.yaml",
         "budget.md",
+        "data.md",
         "ledger.md",
         "plan.md",
         "results.md",

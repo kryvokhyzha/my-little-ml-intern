@@ -40,6 +40,7 @@ experiments/NNN-<slug>/
 ├── budget.md        # caps + spent tally (parsed by intern.budget)
 ├── ledger.md        # per-path ledger table (managed by intern.ledger)
 ├── run.md           # exact commands run on compute (train/benchmark); ungated, filled by train-llm
+├── data.md          # optional: dataset(s) used + how they were prepared (text + mermaid)
 ├── research.md      # optional recipe table from literature-recipe-research
 ├── board.md         # autoresearch shared board (see board.md format)
 ├── metrics.jsonl    # gitignored: append-only metric/event stream (intern.callbacks)
@@ -167,6 +168,21 @@ compute=<local|ssh|hf_jobs|modal|vast> · instance: <e.g. 1x NVIDIA L4 24GB> · 
 
 Sections that do not apply (Provision/Teardown on `local`) are omitted, not left
 empty. Bundled into the published model's `bundle/` by the publish gate.
+
+### data.md format
+
+**Optional** data-provenance card — write one when the experiment's dataset
+needed preparation (conversion, filtering, mixing, materialization) rather than
+being consumed as-is off the Hub. It answers "what did this train on and how was
+it built" so the data is auditable and rebuildable. Free-form Markdown; a
+`mermaid` flowchart of the prep pipeline is encouraged. Cover: **source(s)**
+(upstream id + license/access), **target** (the materialized dataset id +
+private/public), the **pipeline** (each transform → the `data.*`/prep function
+that does it), the **format** (columns + loss shape), **stats** (row counts in →
+kept → split; what was dropped and why), the **key knobs** (`max_length`,
+`eval_size`, seed, …), and the exact **reproduce** command. Bundled into the
+published model's `bundle/` by the publish gate. Datasets consumed unchanged
+need no data.md — the `configs/data/<name>.yaml` node is the whole story.
 
 ### metrics.jsonl schema
 
