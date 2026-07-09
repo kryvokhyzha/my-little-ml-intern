@@ -29,7 +29,6 @@ def _load_data_node(node: DictConfig, for_eval: bool = False) -> Any:
 
 def _run_trl(
     cfg: DictConfig,
-    config_cls: type,
     trainer_cls: type,
     dpo: bool = False,
     reward_funcs: list[Callable[..., Any]] | None = None,
@@ -71,7 +70,7 @@ def _run_trl(
         smoke_overrides.setdefault("eval_strategy", "steps")
         logger.info("data.eval is set but eval_strategy='no' — overriding to 'steps' so eval actually runs")
     apply_tracking_env(cfg)
-    args = build_args(cfg, config_cls, **smoke_overrides)
+    args = build_args(cfg, **smoke_overrides)
 
     callback = TRLAlertCallback(mlog, str(cfg.tracking.backend), AlertRules())
 
@@ -128,19 +127,19 @@ def _run_trl(
 
 
 def run_sft(cfg: DictConfig) -> dict[str, Any]:
-    from trl import SFTConfig, SFTTrainer
+    from trl import SFTTrainer
 
-    return _run_trl(cfg, SFTConfig, SFTTrainer)
+    return _run_trl(cfg, SFTTrainer)
 
 
 def run_dpo(cfg: DictConfig) -> dict[str, Any]:
-    from trl import DPOConfig, DPOTrainer
+    from trl import DPOTrainer
 
-    return _run_trl(cfg, DPOConfig, DPOTrainer, dpo=True)
+    return _run_trl(cfg, DPOTrainer, dpo=True)
 
 
 def run_grpo(cfg: DictConfig) -> dict[str, Any]:
     reward_funcs = grpo_reward_funcs(cfg)
-    from trl import GRPOConfig, GRPOTrainer
+    from trl import GRPOTrainer
 
-    return _run_trl(cfg, GRPOConfig, GRPOTrainer, reward_funcs=reward_funcs)
+    return _run_trl(cfg, GRPOTrainer, reward_funcs=reward_funcs)

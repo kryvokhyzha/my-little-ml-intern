@@ -370,15 +370,15 @@ shared modules directly — never TRL internals.
   fallback), instantiate the datasets from the `cfg.data` group's `train`/`eval`
   `_target_` nodes (`for_eval=True` is injected for the `load_split` target so a
   plain on-disk Dataset can never silently eval on training data) and fail fast
-  via `data.loading.validate_columns` when the columns cannot feed the task, map
-  `cfg.trainer.args` onto `SFTConfig`/`DPOConfig`, attach `TRLAlertCallback`,
-  set `report_to` from `cfg.tracking.backend`,
-  `include_num_input_tokens_seen=True`, write `param_count`/`vocab_size` meta,
-  tee stderr to `logs/stderr.log`, generate 3 sampled continuations (seeded
-  sampling; probe prompts from `resolve_sample_prompts` — held-out `prompt`
-  column for prompt/completion data, else defaults) to `logs/samples.jsonl` (one
-  `{"prompt", "text"}` object per line) after training, print one line:
-  `VERDICT: TRAIN_OK | final_train_loss=<v>` (or `TRAIN_FAIL | <cause>`).
+  via `data.loading.validate_columns` when the columns cannot feed the task,
+  build the trainer args by instantiating the `cfg.trainer.args` node
+  (`_target_: trl.SFTConfig`/`DPOConfig`/`GRPOConfig`) via `build_args`, which
+  layers the runtime values on top (`report_to` from `cfg.tracking.backend`,
+  run*name/project, hardware-aware bf16, smoke overrides, the alert-callback
+  flags), and the LoRA adapter by instantiating `cfg.trainer.peft` (`\_target*:
+  peft.LoraConfig`) via `peft_config`, attach `TRLAlertCallback`, set `report_to`from`cfg.tracking.backend`, `include_num_input_tokens_seen=True`, write `param_count`/`vocab_size`meta, tee stderr to`logs/stderr.log`, generate 3 sampled continuations (seeded sampling; probe prompts from `resolve_sample_prompts`— held-out`prompt`column for prompt/completion data, else defaults) to`logs/samples.jsonl`(one`{"prompt",
+  "text"}`object per line) after training, print one line:`VERDICT: TRAIN_OK |
+  final_train_loss=<v>`(or`TRAIN_FAIL | <cause>`).
 - `training.trl.run_grpo(cfg) -> dict` — mirrors `run_sft`/`run_dpo` via
   `GRPOConfig`/`GRPOTrainer`. The dataset must contain a `prompt` column
   (ValueError naming the column contract otherwise). Reward functions come from
@@ -408,8 +408,10 @@ shared modules directly — never TRL internals.
   `max_steps=1`, dataset sliced to ≤ 32 rows, no checkpoint save. Mandatory
   before any long run.
 - `lightning_adapter.run(cfg) -> dict` — `hydra.utils.instantiate`
-  module/datamodule, `L.Trainer(**cfg.trainer.args)` +
-  `LightningAlertCallback` + tracking logger.
+  module/datamodule and the `cfg.trainer.args` node
+  (`_target_: lightning.pytorch.Trainer`), injecting `logger`/`callbacks`/
+  `enable_progress_bar` + the smoke overrides (the lightning-lane mirror of
+  `build_args`).
 - `axolotl_adapter.render(cfg) -> Path` — merge `base_config` YAML + `overrides`
   → `rendered_path`, return path; print launch command for the remote box
   (`uv run --with axolotl axolotl train <path>`). axolotl is never a local
@@ -496,6 +498,22 @@ Groups land under `model.*`, `data.*`, `trainer.*`, `tracking.*`, `compute.*`,
 `intern.py budget --experiment NNN init --profile <name>` (see
 [docs/004](004-budget-and-gates.md)).
 
+**When to use `_target_` (the rule for adding configs).** A node is a Hydra
+`_target_` instantiate node **iff it maps 1:1 to constructing a Python object**.
+Those are: `model.main`/`model.tokenizer`/`model.ref` (+ nested
+`quantization_config`), `data.*` (`load_split` / `download_sessions`),
+`trainer.args` (`trl.*Config` / `lightning.pytorch.Trainer`), `trainer.peft`
+(`peft.LoraConfig`), and lightning `trainer.module`/`datamodule`. The adapters
+instantiate these and — for `trainer.args` — inject the runtime values the
+config can't hold (tracking wiring, bf16, smoke overrides, logger/callbacks);
+that injection layer is the guardrail library's value-add, not a reason to avoid
+`_target_`. Everything else stays **plain keys**, because it is not an object
+construction: `tracking` is a backend _selector_ (`backend: none|trackio|wandb`)
+plus a parameter sheet that code branches on; `compute` is an agent-read
+parameter sheet no code instantiates; `budget` is a caps sheet parsed from
+budget.md by `intern.budget`. Do not add `_target_` to those — it would be
+cargo-culting a construction pattern onto config that selects behavior.
+
 **model group** (`configs/model/<name>.yaml`) — Hydra-instantiable nodes,
 consumed via
 `hydra.utils.instantiate(OmegaConf.to_container(..., resolve=True))`: `main:`
@@ -544,12 +562,21 @@ model in `configs/model/*.yaml` (`main:` + `tokenizer:`, plus a
 dataset from a hard-coded id in code.
 
 The trainer group carries only run mechanics: `kind`, `planned_tokens`, `peft`,
-`reward_funcs` (GRPO), `args`. Model identity/loading lives in `model`; dataset
-identity in `data`. `main.yaml` provides `seed`, `project_name`,
-`experiment_name`, `experiment_dir`, `smoke_test`. Tracking backend is never
-hardcoded in code — always `cfg.tracking.backend` (`trackio` primary, `wandb`,
-`none`). `tracking.group` (default null) clusters related runs on the dashboard
-— wandb via the `WANDB_RUN_GROUP` env var (both lanes); trackio via its
+`reward_funcs` (GRPO), `args`. Like the model and data groups, `args` and `peft`
+are Hydra `_target_` instantiate nodes — `args._target_: trl.SFTConfig`
+(/`DPOConfig`/`GRPOConfig`, or `lightning.pytorch.Trainer` on the lightning
+lane), `peft._target_: peft.LoraConfig` — so every group declares the class it
+builds. `build_args`/`peft_config` (and the lightning adapter) instantiate them
+and inject the runtime values the config can't know (tracking wiring,
+hardware-aware bf16, smoke overrides, logger/callbacks/alert flags), which is
+the guardrail layer's value-add. Presets stack by inheritance: `trl_sft` (full
+FT) → `trl_sft_lora` (LoRA) → `trl_sft_qlora` (paged optimizer + bf16; compose a
+`_4bit` model). Model identity/loading lives in `model`; dataset identity in
+`data`. `main.yaml` provides `seed`, `project_name`, `experiment_name`,
+`experiment_dir`, `smoke_test`. Tracking backend is never hardcoded in code —
+always `cfg.tracking.backend` (`trackio` primary, `wandb`, `none`).
+`tracking.group` (default null) clusters related runs on the dashboard — wandb
+via the `WANDB_RUN_GROUP` env var (both lanes); trackio via its
 `init(group=...)` kwarg on the Lightning lane only (the TRL lane's
 TrackioCallback hardcodes its init call and cannot forward it).
 

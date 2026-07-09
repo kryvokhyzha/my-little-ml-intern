@@ -1,0 +1,11 @@
+# QLoRA recipe = 4-bit base + LoRA + paged optimizer. Inherits the LoRA-without-regret
+# peft/lr from trl_sft_lora; adds the QLoRA-specific optimizer + bf16 compute + grad
+# checkpointing. QLoRA is not complete without the 4-bit model: compose model=<name>_4bit.
+# Multi-tower bases need a language-tower target regex (see 001's peft override).
+defaults:
+  - trl_sft_lora
+
+args:
+  optim: paged_adamw_8bit
+  bf16: true
+  gradient_checkpointing: true

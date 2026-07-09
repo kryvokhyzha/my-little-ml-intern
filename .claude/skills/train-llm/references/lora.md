@@ -3,7 +3,13 @@
 Distilled from "LoRA Without Regret" (Schulman et al., Thinking Machines, 2025:
 https://thinkingmachines.ai/blog/lora/) and its TRL reproduction
 (https://huggingface.co/docs/trl/lora_without_regret). The SFT column ships as a
-preset: `configs/trainer/trl_sft_lora.yaml`.
+preset: `configs/trainer/trl_sft_lora.yaml`, with `trl_sft_qlora.yaml` layering
+the paged optimizer + bf16 on top for 4-bit bases (compose a `_4bit` model).
+
+The adapter is a `_target_: peft.LoraConfig` node under `trainer.peft` — set
+knobs as plain keys (`r`, `lora_alpha`, `target_modules`, …); the loader
+instantiates it (same path as the model group). Override per experiment under
+`_self_`; a null `trainer.peft` = full fine-tune.
 
 ## Recipe
 

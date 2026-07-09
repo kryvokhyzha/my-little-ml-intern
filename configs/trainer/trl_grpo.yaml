@@ -5,6 +5,7 @@ peft: null
 # each callable must tolerate malformed completions (return the floor reward, never raise).
 reward_funcs: []
 args:
+  _target_: trl.GRPOConfig
   output_dir: ${experiment_dir}/ckpts
   max_steps: -1
   num_train_epochs: 1

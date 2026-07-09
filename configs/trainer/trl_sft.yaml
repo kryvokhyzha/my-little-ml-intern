@@ -1,7 +1,10 @@
 kind: trl_sft
 planned_tokens: null
 peft: null
+# args is a trl.SFTConfig instantiate node; training.trl.build_args resolves it and
+# layers on the runtime values it owns (report_to, run_name, bf16, smoke overrides).
 args:
+  _target_: trl.SFTConfig
   output_dir: ${experiment_dir}/ckpts
   max_steps: -1
   num_train_epochs: 1

@@ -1,8 +1,11 @@
 kind: lightning
-module: null
-datamodule: null
+module: null # _target_ node: your LightningModule
+datamodule: null # _target_ node: your LightningDataModule
 planned_tokens: null
+# args is a lightning.pytorch.Trainer instantiate node; the adapter injects
+# logger/callbacks/enable_progress_bar and the smoke overrides.
 args:
+  _target_: lightning.pytorch.Trainer
   max_steps: 1000
   accelerator: auto
   devices: auto

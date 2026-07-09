@@ -49,6 +49,7 @@ def cfg(tmp_path):
         {
             "trainer": {
                 "args": {
+                    "_target_": "trl.SFTConfig",
                     "output_dir": str(tmp_path / "ckpts"),
                     "max_steps": 5,
                     "per_device_train_batch_size": 1,
@@ -64,32 +65,24 @@ def cfg(tmp_path):
 
 class TestBuildArgsSpacePrivacy:
     def test_space_id_sets_trackio_space_and_private_repo(self, cfg):
-        from trl import SFTConfig
-
         cfg.tracking.space_id = "me/trackio-dash"
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.trackio_space_id == "me/trackio-dash"
         assert args.hub_private_repo is True
 
     def test_private_false_propagates(self, cfg):
-        from trl import SFTConfig
-
         cfg.tracking.space_id = "me/trackio-dash"
         cfg.tracking.private = False
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.hub_private_repo is False
 
     def test_missing_private_key_defaults_true(self, cfg):
-        from trl import SFTConfig
-
         cfg.tracking = OmegaConf.create({"backend": "trackio", "space_id": "me/dash"})
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.hub_private_repo is True
 
     def test_no_space_id_leaves_args_untouched(self, cfg):
-        from trl import SFTConfig
-
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.trackio_space_id is None
         assert args.hub_private_repo is None
 

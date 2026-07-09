@@ -119,31 +119,27 @@ class TestAdapterProgressDefaults:
     def trl_cfg(self, tmp_path):
         return OmegaConf.create(
             {
-                "trainer": {"args": {"output_dir": str(tmp_path / "ckpts"), "max_steps": 1}},
+                "trainer": {
+                    "args": {"_target_": "trl.SFTConfig", "output_dir": str(tmp_path / "ckpts"), "max_steps": 1}
+                },
                 "tracking": {"backend": "none"},
             }
         )
 
     def test_trl_disable_tqdm_when_non_interactive(self, trl_cfg, monkeypatch):
-        from trl import SFTConfig
-
         monkeypatch.setattr(trl_config, "is_interactive", lambda: False)
-        args = trl_config.build_args(trl_cfg, SFTConfig)
+        args = trl_config.build_args(trl_cfg)
         assert bool(args.disable_tqdm) is True
 
     def test_trl_tqdm_kept_when_interactive(self, trl_cfg, monkeypatch):
-        from trl import SFTConfig
-
         monkeypatch.setattr(trl_config, "is_interactive", lambda: True)
-        args = trl_config.build_args(trl_cfg, SFTConfig)
+        args = trl_config.build_args(trl_cfg)
         assert bool(args.disable_tqdm) is False
 
     def test_trl_cfg_value_wins_over_default(self, trl_cfg, monkeypatch):
-        from trl import SFTConfig
-
         monkeypatch.setattr(trl_config, "is_interactive", lambda: True)
         trl_cfg.trainer.args.disable_tqdm = True
-        args = trl_config.build_args(trl_cfg, SFTConfig)
+        args = trl_config.build_args(trl_cfg)
         assert bool(args.disable_tqdm) is True
 
     def test_lightning_progress_bar_default(self, tmp_path, monkeypatch):
@@ -157,7 +153,7 @@ class TestAdapterProgressDefaults:
                 "trainer": {
                     "module": {"_target_": "torch.nn.Linear", "in_features": 2, "out_features": 2},
                     "datamodule": {"_target_": "builtins.dict"},
-                    "args": {"max_steps": 1},
+                    "args": {"_target_": "lightning.pytorch.Trainer", "max_steps": 1},
                 },
                 "tracking": {"backend": "none", "run_name": "t"},
             }
@@ -179,7 +175,7 @@ class TestAdapterProgressDefaults:
                 "trainer": {
                     "module": {"_target_": "torch.nn.Linear", "in_features": 2, "out_features": 2},
                     "datamodule": {"_target_": "builtins.dict"},
-                    "args": {"max_steps": 1, "enable_progress_bar": True},
+                    "args": {"_target_": "lightning.pytorch.Trainer", "max_steps": 1, "enable_progress_bar": True},
                 },
                 "tracking": {"backend": "none", "run_name": "t"},
             }

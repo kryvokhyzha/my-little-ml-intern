@@ -42,7 +42,16 @@ def _resolve_bf16(d: dict[str, Any]) -> None:
             d["bf16"] = False
 
 
-def build_args(cfg: DictConfig, cls: type, **overrides: Any) -> Any:
+def build_args(cfg: DictConfig, **overrides: Any) -> Any:
+    """Instantiate the trainer's ``args`` node (``_target_: trl.*Config``) with runtime injection.
+
+    On top of the declared config this layers the values this repo owns: tracking wiring,
+    the alert-callback flags, agent-aware tqdm, hardware-aware bf16, and the smoke overrides.
+    The config declares the class; this injection is the guardrail library's value-add over a
+    bare ``instantiate``.
+    """
+    from hydra.utils import instantiate
+
     d: dict[str, Any] = OmegaConf.to_container(cfg.trainer.args, resolve=True)
     d["report_to"] = report_to(OmegaConf.select(cfg, "tracking.backend"))
     run_name = OmegaConf.select(cfg, "tracking.run_name")
@@ -64,7 +73,7 @@ def build_args(cfg: DictConfig, cls: type, **overrides: Any) -> Any:
     d.setdefault("disable_tqdm", not is_interactive())
     d.update(overrides)
     _resolve_bf16(d)
-    return cls(**d)
+    return instantiate(d)  # d carries `_target_` from the args node
 
 
 def write_meta(mlog: Any, param_count: int, vocab_size: int, cfg: DictConfig) -> None:

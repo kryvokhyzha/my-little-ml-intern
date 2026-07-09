@@ -2,6 +2,7 @@ kind: trl_dpo
 planned_tokens: null
 peft: null
 args:
+  _target_: trl.DPOConfig
   output_dir: ${experiment_dir}/ckpts
   beta: 0.1
   max_steps: -1

@@ -101,8 +101,6 @@ def _final_train_loss(trainer: Any) -> float | None:
 
 
 def run(cfg: DictConfig) -> dict[str, Any]:
-    import lightning.pytorch as pl
-
     from intern.callbacks import AlertRules, LightningAlertCallback
     from intern.metrics import MetricsLog
 
@@ -116,7 +114,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     module = hydra.utils.instantiate(cfg.trainer.module)
     datamodule = hydra.utils.instantiate(cfg.trainer.datamodule)
 
-    args: dict[str, Any] = OmegaConf.to_container(cfg.trainer.args, resolve=True)
+    args: dict[str, Any] = OmegaConf.to_container(
+        cfg.trainer.args, resolve=True
+    )  # `_target_: lightning.pytorch.Trainer`
     args.setdefault("enable_progress_bar", is_interactive())
     if smoke:
         # val_check_interval must not exceed the truncated train-batch count, or the
@@ -131,7 +131,9 @@ def run(cfg: DictConfig) -> dict[str, Any]:
         )
 
     callback = LightningAlertCallback(mlog, str(cfg.tracking.backend), AlertRules())
-    trainer = pl.Trainer(**args, logger=_build_logger(cfg), callbacks=[callback])
+    # instantiate the Trainer node with the objects the config can't hold (logger/callbacks) —
+    # the lightning-lane mirror of build_args for the TRL lane.
+    trainer = hydra.utils.instantiate(args, logger=_build_logger(cfg), callbacks=[callback])
 
     param_count = sum(p.numel() for p in module.parameters())
     mlog.append_event("meta", key="task", value="lightning")

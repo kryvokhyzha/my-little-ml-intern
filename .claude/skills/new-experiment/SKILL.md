@@ -88,18 +88,18 @@ experiment_name: NNN-<slug>
 Swap a group pick only when the task calls for it: `model` ∈
 `smollm2_135m|gemma_4_e2b_it|gemma_4_e2b_it_4bit`, `data` ∈
 `tiny_synthetic|pi_mono_sft`, `trainer` ∈
-`trl_sft|trl_sft_lora|trl_dpo|trl_grpo|lightning|axolotl`, `tracking` ∈
-`trackio|wandb|none`, `compute` ∈ `local|ssh|modal|vast|hf_jobs`, `budget` ∈
-`smoke|default|lora|sft|dpo|grpo|pretrain|autoresearch` (see `configs/*/`).
-**Pick the budget by task** — caps must fit the work (a smoke needs minutes; a
-GRPO run needs hours). The catalog is in step 5. Model identity lives in the
-`model` group and dataset identity in the `data` group — never invent values by
-typing raw repo ids or dataset slugs into trainer keys; override the
-`model:`/`data:` pick instead. A new model or dataset is a one-file addition
-(`configs/model/<name>.yaml` / `configs/data/<name>.yaml`) following the
-`_target_` pattern in `docs/001-architecture.md` ("Config groups"). Set other
-concrete overrides under `_self_` only when actually known. Tracking backend is
-never hardcoded in code; adapters read `cfg.tracking.backend`.
+`trl_sft|trl_sft_lora|trl_sft_qlora|trl_dpo|trl_grpo|lightning|axolotl`,
+`tracking` ∈ `trackio|wandb|none`, `compute` ∈ `local|ssh|modal|vast|hf_jobs`,
+`budget` ∈ `smoke|default|lora|sft|dpo|grpo|pretrain|autoresearch` (see
+`configs/*/`). **Pick the budget by task** — caps must fit the work (a smoke
+needs minutes; a GRPO run needs hours). The catalog is in step 5. Model identity
+lives in the `model` group and dataset identity in the `data` group — never
+invent values by typing raw repo ids or dataset slugs into trainer keys;
+override the `model:`/`data:` pick instead. A new model or dataset is a one-file
+addition (`configs/model/<name>.yaml` / `configs/data/<name>.yaml`) following
+the `_target_` pattern in `docs/001-architecture.md` ("Config groups"). Set
+other concrete overrides under `_self_` only when actually known. Tracking
+backend is never hardcoded in code; adapters read `cfg.tracking.backend`.
 
 ### 4. Create the script
 

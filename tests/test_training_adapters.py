@@ -74,6 +74,7 @@ class TestBuildArgs:
             {
                 "trainer": {
                     "args": {
+                        "_target_": "trl.SFTConfig",
                         "output_dir": str(tmp_path / "ckpts"),
                         "max_steps": 5,
                         "per_device_train_batch_size": 1,
@@ -88,61 +89,78 @@ class TestBuildArgs:
         )
 
     def test_injection(self, cfg):
-        from trl import SFTConfig
-
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.report_to == ["trackio"]
         assert args.run_name == "001-test"
         assert bool(args.include_num_input_tokens_seen)
         assert args.max_steps == 5
         assert args.seed == 42
 
-    def test_overrides_win(self, cfg):
+    def test_target_builds_the_declared_class(self, cfg):
         from trl import SFTConfig
 
-        args = _build_args(cfg, SFTConfig, max_steps=1, save_strategy="no")
+        # The args node's `_target_` drives construction — no class passed from code.
+        assert isinstance(_build_args(cfg), SFTConfig)
+
+    def test_overrides_win(self, cfg):
+        args = _build_args(cfg, max_steps=1, save_strategy="no")
         assert args.max_steps == 1
         assert args.save_strategy == "no"
 
     def test_none_backend_without_run_name(self, cfg):
-        from trl import SFTConfig
-
         cfg.tracking = OmegaConf.create({"backend": "none"})
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.report_to == []
 
     def test_bf16_pinned_false_on_incapable_hardware(self, cfg, monkeypatch):
         # TRL >=1.7 defaults bf16=True when fp16 is unset; on a CPU-only box (the CI
         # runner) transformers then rejects it. The adapter must pin bf16=False there.
         import transformers.utils
-        from trl import SFTConfig
 
         monkeypatch.setattr(transformers.utils, "is_torch_bf16_gpu_available", lambda: False)
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.bf16 is False
 
     def test_explicit_bf16_false_survives(self, cfg):
-        from trl import SFTConfig
-
         cfg.trainer.args.bf16 = False
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.bf16 is False
 
     def test_tracking_project_reaches_trackio_field(self, cfg):
         # TrackioCallback logs under TrainingArguments.project (default "huggingface").
-        from trl import SFTConfig
-
         cfg.tracking.project = "my-proj"
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.project == "my-proj"
 
     def test_explicit_args_project_wins(self, cfg):
-        from trl import SFTConfig
-
         cfg.tracking.project = "from-tracking"
         cfg.trainer.args.project = "explicit"
-        args = _build_args(cfg, SFTConfig)
+        args = _build_args(cfg)
         assert args.project == "explicit"
+
+
+class TestPeftConfig:
+    def test_instantiates_lora_config_from_target_node(self):
+        from peft import LoraConfig
+
+        from training.models import peft_config
+
+        cfg = OmegaConf.create(
+            {
+                "trainer": {
+                    "peft": {"_target_": "peft.LoraConfig", "r": 16, "lora_alpha": 32, "target_modules": "all-linear"}
+                }
+            }
+        )
+        result = peft_config(cfg)
+        assert isinstance(result, LoraConfig)
+        assert result.r == 16
+        assert result.lora_alpha == 32
+
+    def test_none_peft_returns_none(self):
+        from training.models import peft_config
+
+        assert peft_config(OmegaConf.create({"trainer": {"peft": None}})) is None
 
 
 class FakeMetricsLog:

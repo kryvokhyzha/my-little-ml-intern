@@ -49,6 +49,7 @@ def peft_config(cfg: DictConfig) -> Any:
     peft = OmegaConf.select(cfg, "trainer.peft")
     if not peft:
         return None
-    from peft import LoraConfig
+    from hydra.utils import instantiate
 
-    return LoraConfig(**OmegaConf.to_container(peft, resolve=True))
+    # `_target_: peft.LoraConfig` node — same instantiate path as the model group.
+    return instantiate(OmegaConf.to_container(peft, resolve=True))

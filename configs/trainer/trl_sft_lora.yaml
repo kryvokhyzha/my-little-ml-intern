@@ -3,10 +3,13 @@ defaults:
   - trl_sft
 
 peft:
+  _target_: peft.LoraConfig
   r: 256
   lora_alpha: 16
   lora_dropout: 0.0
   target_modules: all-linear
+  bias: none
+  task_type: CAUSAL_LM
 
 args:
   learning_rate: 2.0e-4
