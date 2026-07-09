@@ -16,6 +16,11 @@ verify arbitrates.
 - LoRA paths: LR is 10× the full-FT optimum instead — see lora.md.
 - AdamW β1 0.9 / β2 0.95, weight decay 0.1 (or 0.01), grad clip 1.0, warmup 1–5%
   of steps: the boring defaults every frontier run still uses.
+- LR schedule: set `trainer.args.lr_scheduler_type` (cosine ships as the SFT
+  default) plus `trainer.args.lr_scheduler_kwargs` for scheduler-specific params
+  — e.g. `cosine_with_min_lr` with `{min_lr_rate: 0.1}` to floor the LR, or
+  `cosine_with_restarts` with `{num_cycles: 2}`. Both are native `SFTConfig`
+  fields; set them as plain keys under `trainer.args`.
 
 ## Multi-epoch SFT
 

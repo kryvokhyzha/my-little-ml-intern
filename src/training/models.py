@@ -52,4 +52,5 @@ def peft_config(cfg: DictConfig) -> Any:
     from hydra.utils import instantiate
 
     # `_target_: peft.LoraConfig` node — same instantiate path as the model group.
-    return instantiate(OmegaConf.to_container(peft, resolve=True))
+    # _convert_="all" keeps target_modules / nested kwargs as plain list/dict.
+    return instantiate(OmegaConf.to_container(peft, resolve=True), _convert_="all")

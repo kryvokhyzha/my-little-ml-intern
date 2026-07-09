@@ -138,6 +138,17 @@ class TestBuildArgs:
         args = _build_args(cfg)
         assert args.project == "explicit"
 
+    def test_lr_scheduler_kwargs_is_plain_dict(self, cfg):
+        # instantiate must not leave nested kwargs as DictConfig — TrainingArguments'
+        # JSON serialization (model card, config logging) needs plain dicts.
+        import json
+
+        cfg.trainer.args.lr_scheduler_type = "cosine_with_min_lr"
+        cfg.trainer.args.lr_scheduler_kwargs = {"min_lr_rate": 0.1}
+        args = _build_args(cfg)
+        assert type(args.lr_scheduler_kwargs) is dict
+        assert json.dumps(args.lr_scheduler_kwargs) == '{"min_lr_rate": 0.1}'
+
 
 class TestPeftConfig:
     def test_instantiates_lora_config_from_target_node(self):

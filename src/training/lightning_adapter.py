@@ -132,8 +132,8 @@ def run(cfg: DictConfig) -> dict[str, Any]:
 
     callback = LightningAlertCallback(mlog, str(cfg.tracking.backend), AlertRules())
     # instantiate the Trainer node with the objects the config can't hold (logger/callbacks) —
-    # the lightning-lane mirror of build_args for the TRL lane.
-    trainer = hydra.utils.instantiate(args, logger=_build_logger(cfg), callbacks=[callback])
+    # the lightning-lane mirror of build_args for the TRL lane. _convert_="all" → plain dicts.
+    trainer = hydra.utils.instantiate(args, logger=_build_logger(cfg), callbacks=[callback], _convert_="all")
 
     param_count = sum(p.numel() for p in module.parameters())
     mlog.append_event("meta", key="task", value="lightning")

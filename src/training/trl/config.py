@@ -73,7 +73,9 @@ def build_args(cfg: DictConfig, **overrides: Any) -> Any:
     d.setdefault("disable_tqdm", not is_interactive())
     d.update(overrides)
     _resolve_bf16(d)
-    return instantiate(d)  # d carries `_target_` from the args node
+    # _convert_="all": nested kwargs (lr_scheduler_kwargs, gradient_checkpointing_kwargs)
+    # land as plain dicts, not DictConfig — TrainingArguments' JSON serialization needs that.
+    return instantiate(d, _convert_="all")  # d carries `_target_` from the args node
 
 
 def write_meta(mlog: Any, param_count: int, vocab_size: int, cfg: DictConfig) -> None:

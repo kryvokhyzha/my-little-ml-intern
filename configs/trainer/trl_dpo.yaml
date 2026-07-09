@@ -10,6 +10,8 @@ args:
   per_device_train_batch_size: 1
   gradient_accumulation_steps: 16
   learning_rate: 5.0e-7
+  lr_scheduler_type: linear # any transformers SchedulerType; see trl_sft.yaml for options
+  lr_scheduler_kwargs: null # e.g. {num_cycles: 2} for cosine_with_restarts
   logging_steps: 1
   eval_strategy: "no"
   save_steps: 200

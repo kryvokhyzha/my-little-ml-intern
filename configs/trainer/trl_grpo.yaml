@@ -15,6 +15,8 @@ args:
   max_completion_length: 256
   learning_rate: 1.0e-6
   beta: 0.0
+  lr_scheduler_type: linear # any transformers SchedulerType; `constant` is common for RL
+  lr_scheduler_kwargs: null
   logging_steps: 1
   eval_strategy: "no"
   save_steps: 200
