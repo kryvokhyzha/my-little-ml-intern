@@ -221,6 +221,22 @@ def ledger(
     raise SystemExit(2)
 
 
+def check(experiment: str | int, experiments_root: str | None = None) -> None:
+    """Scaffold gate: 0 all required files present, 1 missing a required file, 2 experiment absent."""
+    from intern.scaffold import REQUIRED_FILES, missing_required
+
+    experiment_dir = _resolve_experiment(experiment, experiments_root)
+    if experiment_dir.name.startswith("999-"):
+        logger.info("{} is 999- scratch — scaffold gate exempt", experiment_dir.name)
+        raise SystemExit(0)
+    missing = missing_required(experiment_dir)
+    if missing:
+        logger.error("Scaffold incomplete for {}: missing {}", experiment_dir.name, ", ".join(missing))
+        raise SystemExit(1)
+    print(f"scaffold complete: {', '.join(REQUIRED_FILES)}")
+    raise SystemExit(0)
+
+
 def status(experiment: str | int, json: bool = False, experiments_root: str | None = None) -> None:
     experiment_dir = _resolve_experiment(experiment, experiments_root)
     render_gates(experiment_dir, as_json=bool(json))
@@ -260,5 +276,13 @@ def deps(min_age_days: int = 7) -> None:
 
 if __name__ == "__main__":
     fire.Fire(
-        {"verify": verify, "budget": budget, "ledger": ledger, "status": status, "publish": publish, "deps": deps}
+        {
+            "verify": verify,
+            "check": check,
+            "budget": budget,
+            "ledger": ledger,
+            "status": status,
+            "publish": publish,
+            "deps": deps,
+        }
     )

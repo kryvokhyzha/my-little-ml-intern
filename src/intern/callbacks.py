@@ -13,7 +13,7 @@ from loguru import logger
 
 
 if TYPE_CHECKING:
-    from .metrics import MetricsLog
+    from intern.metrics import MetricsLog
 
 try:  # transformers absent -> TRLAlertCallback unusable, LightningAlertCallback still importable
     from transformers import TrainerCallback as _TrainerCallbackBase

@@ -12,8 +12,9 @@ from typing import TYPE_CHECKING
 
 from loguru import logger
 
-from .ledger import Ledger
-from .verify import verify_run
+from intern.ledger import Ledger
+from intern.scaffold import missing_required
+from intern.verify import verify_run
 
 
 if TYPE_CHECKING:
@@ -242,6 +243,12 @@ def publish_run(experiment_dir: Path | str, repo_id: str | None = None, private:
         logger.error("Publish refused: live verify exited {} — never trust a stale verify.md", verify_code)
         return 1
     logger.info("Publish gate: live verify passed")
+
+    missing = missing_required(experiment_dir)
+    if missing:
+        logger.error("Publish refused: scaffold incomplete — missing {} (these go in the bundle)", ", ".join(missing))
+        return 1
+    logger.info("Publish gate: scaffold complete")
 
     results_path = experiment_dir / "results.md"
     if not results_path.is_file():

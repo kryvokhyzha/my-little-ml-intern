@@ -164,6 +164,15 @@ def test_refuses_without_results_md(experiment_dir: Path, fake_api: FakeApi) -> 
     assert fake_api.created == []
 
 
+def test_refuses_incomplete_scaffold(experiment_dir: Path, fake_api: FakeApi) -> None:
+    # run.md is a required, bundled artifact — publishing without it would ship an
+    # unreproducible model, so the gate refuses (1) before any upload.
+    (experiment_dir / "run.md").unlink()
+    assert publish_run(experiment_dir) == 1
+    assert fake_api.created == []
+    assert fake_api.folder_uploads == []
+
+
 def test_refuses_without_passed_ledger_row(experiment_dir: Path, fake_api: FakeApi) -> None:
     (experiment_dir / "ledger.md").write_text(_ledger_md(status="running", verify="pending"))
     assert publish_run(experiment_dir) == 1

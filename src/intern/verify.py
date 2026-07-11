@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from loguru import logger
 
-from .metrics import MetricsLog
+from intern.metrics import MetricsLog
 
 
 Status = Literal["PASS", "FAIL", "SKIP"]

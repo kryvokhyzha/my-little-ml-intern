@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from .ledger import Ledger
+    from intern.ledger import Ledger
 
 _LINE_RE = re.compile(r"^(?P<key>\w+):\s*(?P<value>.*?)\s*$")
 _INT_FIELDS = ("max_paths", "max_retries_per_path", "scale_ceiling_params", "paths_launched", "retries_used")

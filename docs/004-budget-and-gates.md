@@ -93,6 +93,7 @@ uv run python scripts/python/intern.py budget --experiment NNN can-retry --path-
 uv run python scripts/python/intern.py budget --experiment NNN record-launch|record-retry
 uv run python scripts/python/intern.py budget --experiment NNN record-gpu-h --hours H
 uv run python scripts/python/intern.py verify --experiment NNN [--vocab-size N] [--checks a,b]
+uv run python scripts/python/intern.py check --experiment NNN
 uv run python scripts/python/intern.py ledger --experiment NNN show|upsert --path-id ... [--field value ...]
 uv run python scripts/python/intern.py status --experiment NNN [--json]
 uv run python scripts/python/intern.py publish --experiment NNN [--repo-id org/name] [--private true|false]
@@ -107,6 +108,7 @@ uv run python scripts/python/intern.py deps [--min-age-days 7]
 | `budget can-retry`   | retry allowed     | denied (reason printed)  | missing `--path-id` or ledger.md                    |
 | `budget record-*`    | spend recorded    | —                        | bad/missing arguments (e.g. negative `--hours`)     |
 | `verify`             | all checks passed | ≥ 1 check FAILED         | metrics.jsonl absent, or current run logged nothing |
+| `check`              | scaffold complete | a required file missing  | experiment dir missing                              |
 | `ledger show/upsert` | ok                | —                        | unknown column, invalid enum, missing file          |
 | `status`             | dashboard printed | —                        | experiment missing                                  |
 | `publish`            | published         | gate refused             | missing artifacts or credentials                    |

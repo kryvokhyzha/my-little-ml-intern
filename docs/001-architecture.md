@@ -346,6 +346,16 @@ A low loss number is never evidence the model works.
   a declared floor/pin version is younger than `min_age_days`; informational
   when a newer eligible version exists. Nonzero exit on violations.
 
+### scaffold.py
+
+- `REQUIRED_FILES = (task.md, plan.md, budget.md, ledger.md, run.md)` — the
+  authored files every experiment must carry. Gate outputs (verify.md,
+  results.md) and optional cards (data.md, research.md, board.md) are NOT here.
+- `missing_required(experiment_dir) -> list[str]` — the required files absent
+  from the dir, canonical order (empty = complete). Backs `intern.py check`, the
+  `status` scaffold line, and the publish gate. Catches "agent forgot to create
+  run.md" — the requirement is code, not just the skill's done-condition prose.
+
 ## src/training API
 
 Layout: `training/trl/` is the TRL subpackage (`rewards.py`, `config.py`,
@@ -431,6 +441,7 @@ uv run python scripts/python/intern.py budget --experiment 001 can-retry --path-
 uv run python scripts/python/intern.py budget --experiment 001 record-gpu-h --hours 0.5
 uv run python scripts/python/intern.py ledger --experiment 001 upsert --path-id path-1 --status running ...
 uv run python scripts/python/intern.py ledger --experiment 001 show
+uv run python scripts/python/intern.py check --experiment 001
 uv run python scripts/python/intern.py status --experiment 001 [--json]
 uv run python scripts/python/intern.py publish --experiment 001 [--repo-id org/name] [--private true|false]
 uv run python scripts/python/intern.py deps [--min-age-days 7]

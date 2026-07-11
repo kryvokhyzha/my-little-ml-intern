@@ -257,11 +257,13 @@ lanes).
 ```bash
 uv run python scripts/python/NNN-<slug>.py --cfg job
 uv run python scripts/python/intern.py budget --experiment NNN status
+uv run python scripts/python/intern.py check --experiment NNN
 ```
 
-Both must exit 0 (`--cfg job` prints the composed config without running
-training). Exit 1 = gate denied, 2 = usage/missing artifacts — fix the scaffold
-before reporting; never report success on a nonzero exit.
+All must exit 0 (`--cfg job` prints the composed config without running
+training; `check` refuses if any required file — task/plan/budget/ledger/run.md
+— is missing). Exit 1 = gate denied, 2 = usage/missing artifacts — fix the
+scaffold before reporting; never report success on a nonzero exit.
 
 ### 7. Report back
 
@@ -295,6 +297,7 @@ failed gate means the run failed, regardless of loss.
       `uv run python scripts/python/NNN-<slug>.py     --cfg job` exits 0.
 - [ ] `experiments/NNN-<slug>/` contains task.md, plan.md, budget.md, ledger.md,
       run.md (skeleton) — and no results.md or verify.md.
+      `intern.py check --experiment NNN` exits 0 (the scaffold gate).
 - [ ] Every hypothesis in plan.md has mechanism / expected_delta /
       falsification; each path is one Hydra override.
 - [ ] budget.md parses:

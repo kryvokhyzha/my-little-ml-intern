@@ -157,7 +157,10 @@ Non-negotiable rules (enforced by `scripts/python/intern.py` exit codes):
   falsification condition.
 - Scripts that import from `src/` add `sys.path.insert(0, str(root / "src"))`
   right after `rootutils.setup_root(...)` — library imports stay bare
-  (`from intern.verify import ...`), never `from src....`.
+  (`from intern.verify import ...`), never `from src....`. The same style holds
+  **inside** `src/` packages: absolute bare imports
+  (`from intern.scaffold import ...`, `from training.runtime import ...`), no
+  relative imports (`from .scaffold import ...`).
 
 ## Docs conventions (`docs/`)
 

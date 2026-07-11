@@ -169,6 +169,32 @@ def test_budget_init_missing_profile_exits_2(experiments_root: Path) -> None:
     assert result.returncode == 2, result.stderr
 
 
+def test_check_incomplete_scaffold_exits_1(experiments_root: Path) -> None:
+    # the fixture has budget.md + ledger.md but not task/plan/run.md
+    result = run_cli("check", "--experiment", "001", "--experiments-root", experiments_root)
+    assert result.returncode == 1, result.stderr
+    assert "run.md" in result.stderr
+
+
+def test_check_complete_scaffold_exits_0(experiments_root: Path) -> None:
+    for name in ("task.md", "plan.md", "run.md"):
+        (experiments_root / "001-demo" / name).write_text("# stub\n")
+    result = run_cli("check", "--experiment", "001", "--experiments-root", experiments_root)
+    assert result.returncode == 0, result.stderr
+    assert "scaffold complete" in result.stdout
+
+
+def test_check_999_scratch_is_exempt(experiments_root: Path) -> None:
+    (experiments_root / "999-scratch").mkdir()  # no files at all
+    result = run_cli("check", "--experiment", "999-scratch", "--experiments-root", experiments_root)
+    assert result.returncode == 0, result.stderr
+
+
+def test_check_missing_experiment_exits_2(experiments_root: Path) -> None:
+    result = run_cli("check", "--experiment", "077", "--experiments-root", experiments_root)
+    assert result.returncode == 2, result.stderr
+
+
 def test_verify_passing_run_exits_0(experiments_root: Path) -> None:
     result = run_cli("verify", "--experiment", "001", "--experiments-root", experiments_root)
     assert result.returncode == 0, result.stderr

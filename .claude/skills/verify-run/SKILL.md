@@ -92,7 +92,10 @@ loss.
    ```
 
    Only after the ledger update, write `experiments/NNN-<slug>/results.md`
-   (winner + comparison per the experiment convention).
+   (winner + comparison per the experiment convention). Then confirm the
+   scaffold is complete —
+   `uv run python scripts/python/intern.py check --experiment NNN` must exit 0
+   (catches a forgotten run.md before you report done).
 
    **Fail** (exit 1, or judgment FAIL):
 
@@ -144,6 +147,6 @@ loss.
       logs/samples.jsonl.
 - [ ] Ledger `verify` column updated to `pass` or `fail` for the verified path
       (with `failure_cause` on fail).
-- [ ] On pass only: results.md written.
+- [ ] On pass only: results.md written, and `intern.py check` exits 0.
 - [ ] On fail: postmortems/path-<id>.md exists; no retry launched without
       `budget can-retry` exiting 0.

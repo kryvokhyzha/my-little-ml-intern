@@ -10,9 +10,8 @@ from typing import Any
 from loguru import logger
 
 from helper.display import get_console, is_interactive, print_table
-
-from .budget import load_budget
-from .ledger import Ledger
+from intern.budget import load_budget
+from intern.ledger import Ledger
 
 
 _VERDICT_HEAD_RE = re.compile(r"^VERDICT:\s*(?P<name>\S+)\s*=\s*(?P<status>\S+)\s*$")
@@ -84,9 +83,12 @@ def _parse_ledger(path: Path) -> list[dict[str, str]]:
 
 
 def gates_summary(experiment_dir: Path) -> dict[str, Any]:
-    """Collect the three gate states; each section tolerates a missing artifact (None / empty list)."""
+    """Collect the gate states; each section tolerates a missing artifact (None / empty list)."""
+    from intern.scaffold import missing_required
+
     experiment_dir = Path(experiment_dir)
     return {
+        "scaffold": missing_required(experiment_dir),
         "verify": _parse_verify(experiment_dir / "verify.md"),
         "budget": _parse_budget(experiment_dir / "budget.md"),
         "ledger": _parse_ledger(experiment_dir / "ledger.md"),
@@ -101,6 +103,8 @@ def _verdict_line(check: dict[str, str]) -> str:
 
 
 def _render_plain(summary: dict[str, Any]) -> None:
+    scaffold = summary["scaffold"]
+    print("SCAFFOLD | complete" if not scaffold else f"SCAFFOLD | MISSING: {', '.join(scaffold)}")
     verify = summary["verify"]
     if verify is not None:
         for check in verify["checks"]:
@@ -122,6 +126,8 @@ def _render_plain(summary: dict[str, Any]) -> None:
 
 
 def _render_rich(summary: dict[str, Any]) -> None:
+    scaffold = summary["scaffold"]
+    get_console().print("SCAFFOLD: complete" if not scaffold else f"SCAFFOLD: MISSING {', '.join(scaffold)}")
     verify = summary["verify"]
     verify_rows = [] if verify is None else [[c[column] for column in _VERIFY_COLUMNS] for c in verify["checks"]]
     print_table("Verify checks", _VERIFY_COLUMNS, verify_rows)

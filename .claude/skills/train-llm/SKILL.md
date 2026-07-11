@@ -164,12 +164,15 @@ When a path finishes, run the **verify-run** skill (or directly):
 
 ```bash
 uv run python scripts/python/intern.py verify --experiment NNN
+uv run python scripts/python/intern.py check  --experiment NNN   # scaffold gate: run.md etc. present
 uv run python scripts/python/intern.py budget --experiment NNN record-gpu-h --hours <h>
 uv run python scripts/python/intern.py ledger --experiment NNN upsert --path-id path-1 --status passed --verify pass
 ```
 
-Never write results.md or report success unless `intern.py verify` exited 0. A
-failed gate means the run failed, regardless of loss.
+`check` must exit 0 before you report done — it catches a forgotten required
+file like run.md (a run you can't reproduce is not a finished run; data.md stays
+optional). Never write results.md or report success unless `intern.py verify`
+exited 0. A failed gate means the run failed, regardless of loss.
 
 On verify failure: write `postmortems/path-<id>.md` (symptom → root-cause
 hypothesis → fix), then retry only if
@@ -192,7 +195,8 @@ it is in run.md and confirmed (no orphaned disks/VMs left billing).
       least one path, and generation samples were eyeballed, not just
       mechanically checked.
 - [ ] `experiments/NNN-<slug>/run.md` holds the exact on-compute commands
-      (setup/train, plus benchmark and teardown when they applied).
+      (setup/train, plus benchmark and teardown when they applied), and
+      `intern.py check --experiment NNN` exits 0 (scaffold gate).
 - [ ] results.md written only after verify exit 0, naming the winning path with
       the ledger comparison.
 - [ ] `notify.sh train_done` fired only after a passing verify — never for a run

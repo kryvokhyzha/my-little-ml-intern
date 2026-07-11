@@ -66,6 +66,8 @@ def experiment_dir(tmp_path: Path) -> Path:
     (experiment / "verify.md").write_text(VERIFY_MD)
     (experiment / "budget.md").write_text(BUDGET_MD)
     (experiment / "ledger.md").write_text(_ledger_md())
+    for name in ("task.md", "plan.md", "run.md"):  # complete the required scaffold set
+        (experiment / name).write_text("# stub\n")
     return experiment
 
 
@@ -105,7 +107,12 @@ class TestGatesSummary:
 
     def test_tolerates_missing_artifacts(self, tmp_path: Path) -> None:
         summary = gates_summary(tmp_path)
-        assert summary == {"verify": None, "budget": None, "ledger": []}
+        assert summary == {
+            "scaffold": ["task.md", "plan.md", "budget.md", "ledger.md", "run.md"],
+            "verify": None,
+            "budget": None,
+            "ledger": [],
+        }
 
     def test_verify_without_judgment(self, experiment_dir: Path) -> None:
         (experiment_dir / "verify.md").write_text("\n".join([*VERDICT_LINES, OVERALL_LINE]) + "\n")
@@ -119,6 +126,7 @@ class TestRenderGates:
         render_gates(experiment_dir)
         lines = capsys.readouterr().out.splitlines()
         assert lines == [
+            "SCAFFOLD | complete",
             *VERDICT_LINES,
             OVERALL_LINE,
             JUDGMENT_LINE,
@@ -127,9 +135,10 @@ class TestRenderGates:
             "LEDGER | path-2 | status=queued | verify=pending",
         ]
 
-    def test_plain_mode_missing_artifacts_prints_nothing(self, tmp_path: Path, plain_env, capsys) -> None:
+    def test_plain_mode_empty_dir_shows_scaffold_missing(self, tmp_path: Path, plain_env, capsys) -> None:
+        # A bare experiment dir still reports its missing scaffold — the dashboard never silently blanks.
         render_gates(tmp_path)
-        assert capsys.readouterr().out == ""
+        assert capsys.readouterr().out == "SCAFFOLD | MISSING: task.md, plan.md, budget.md, ledger.md, run.md\n"
 
     def test_json_round_trips(self, experiment_dir: Path, capsys) -> None:
         render_gates(experiment_dir, as_json=True)

@@ -12,8 +12,7 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 
 from helper.display import is_interactive
-
-from .runtime import run_with_stderr_tee, smoke_enabled
+from training.runtime import run_with_stderr_tee, smoke_enabled
 
 
 class TrackioLightningLogger(Logger):
