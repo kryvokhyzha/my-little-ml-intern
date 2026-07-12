@@ -74,8 +74,8 @@ once — from then on all gates apply.
 
 defaults:
   - main
-  - model: <pick> # smollm2_135m | gemma_4_e2b_it | gemma_4_e2b_it_4bit
-  - data: <pick> # tiny_synthetic | pi_mono_sft
+  - model: <pick> # ls configs/model/
+  - data: <pick> # ls configs/data/
   - trainer: trl_sft
   - tracking: trackio
   - compute: local
@@ -86,15 +86,15 @@ experiment_name: NNN-<slug>
 ```
 
 Swap a group pick only when the task calls for it: `model` ∈
-`smollm2_135m|gemma_4_e2b_it|gemma_4_e2b_it_4bit`, `data` ∈
-`tiny_synthetic|pi_mono_sft`, `trainer` ∈
-`trl_sft|trl_sft_lora|trl_sft_qlora|trl_dpo|trl_grpo|lightning|axolotl`,
-`tracking` ∈ `trackio|wandb|none`, `compute` ∈ `local|ssh|modal|vast|hf_jobs`,
-`budget` ∈ `smoke|default|lora|sft|dpo|grpo|pretrain|autoresearch` (see
-`configs/*/`). **Pick the budget by task** — caps must fit the work (a smoke
-needs minutes; a GRPO run needs hours). The catalog is in step 5. Model identity
-lives in the `model` group and dataset identity in the `data` group — never
-invent values by typing raw repo ids or dataset slugs into trainer keys;
+`smollm2_135m|smollm2_135m_it|smollm2_360m_it|gemma_4_e2b_it|gemma_4_e2b_it_4bit`,
+`data` ∈ `tiny_synthetic|pi_mono_sft|smoltalk_everyday|self_distill_local`,
+`trainer` ∈
+`trl_sft|trl_sft_lora|trl_sft_qlora|trl_dpo|trl_kto|trl_grpo|trl_gkd|lightning|axolotl`,
+`tracking` ∈ `trackio|wandb|none`, `compute` ∈ `local|ssh|modal|vast|hf_jobs`
+(see `configs/*/`). **Pick the budget by task** — caps must fit the work (a
+smoke needs minutes; a GRPO run needs hours); the catalog is in step 5. Model
+identity lives in the `model` group and dataset identity in the `data` group —
+never invent values by typing raw repo ids or dataset slugs into trainer keys;
 override the `model:`/`data:` pick instead. A new model or dataset is a one-file
 addition (`configs/model/<name>.yaml` / `configs/data/<name>.yaml`) following
 the `_target_` pattern in `docs/001-architecture.md` ("Config groups"). Set
@@ -133,22 +133,6 @@ def main(cfg: DictConfig) -> None:
         from training.trl import run_sft
 
         run_sft(cfg)
-    elif kind == "trl_dpo":
-        from training.trl import run_dpo
-
-        run_dpo(cfg)
-    elif kind == "trl_grpo":
-        from training.trl import run_grpo
-
-        run_grpo(cfg)
-    elif kind == "lightning":
-        from training.lightning_adapter import run
-
-        run(cfg)
-    elif kind == "axolotl":
-        from training.axolotl_adapter import render
-
-        render(cfg)
     else:
         raise ValueError(f"unknown trainer.kind: {kind}")
 
@@ -159,6 +143,10 @@ if __name__ == "__main__":
 
 Rules (from the new-script skill — read it when unsure):
 
+- Dispatch ONLY the lane(s) the config composes (shipped scripts do exactly
+  this) — the analogous branch for other lanes is
+  `training.trl.run_dpo|run_grpo|run_gkd|run_kto`,
+  `training.lightning_adapter.run`, or `training.axolotl_adapter.render`.
 - Keep the adapter imports lazy inside the branches so `--cfg job` and config
   composition never require training dependencies.
 - Library imports stay bare (`from training...`, `from intern...`), never

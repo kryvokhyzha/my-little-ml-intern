@@ -13,6 +13,9 @@ args:
   per_device_train_batch_size: 4
   gradient_accumulation_steps: 4
   max_completion_length: 256
+  # Rollout sampling policy — THE exploration knobs for online RL (TRL defaults shown).
+  temperature: 1.0
+  top_p: 1.0
   learning_rate: 1.0e-6
   beta: 0.0
   lr_scheduler_type: linear # any transformers SchedulerType; `constant` is common for RL

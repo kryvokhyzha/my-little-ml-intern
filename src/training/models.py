@@ -36,6 +36,17 @@ def load_ref_model(cfg: DictConfig) -> Any | None:
     return _instantiate_model(ref) if ref is not None else None
 
 
+def load_teacher_model(cfg: DictConfig) -> Any:
+    """Instantiate the `model.teacher` node (on-policy distillation); the GKD lane requires it."""
+    teacher = OmegaConf.select(cfg, "model.teacher")
+    if teacher is None:
+        raise ValueError(
+            "trainer.kind=trl_gkd requires a `model.teacher` node (same shape as `model.main`; "
+            "teacher and student must share a tokenizer)"
+        )
+    return _instantiate_model(teacher)
+
+
 def load_tokenizer(cfg: DictConfig) -> Any:
     from hydra.utils import instantiate
 

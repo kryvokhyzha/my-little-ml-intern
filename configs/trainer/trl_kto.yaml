@@ -1,0 +1,31 @@
+# KTO (Kahneman-Tversky Optimization): preference alignment from UNPAIRED binary
+# feedback — each row is {prompt, completion, label(bool)}; no chosen/rejected pairs
+# needed, so real-world thumbs-up/down data works directly. Uses a reference model
+# like DPO (optional `model.ref` node; TRL clones one when absent). Stable in TRL 1.8.
+# args is an instantiate node: any KTOConfig / TrainingArguments field is settable here.
+kind: trl_kto
+planned_tokens: null
+peft: null
+args:
+  _target_: trl.KTOConfig
+  output_dir: ${experiment_dir}/ckpts
+  # KTO-specific: beta = deviation-from-reference penalty; the weights rebalance
+  # asymmetric feedback (e.g. many more thumbs-down than thumbs-up — KTO paper
+  # recommends keeping desirable_weight*n_desirable / undesirable_weight*n_undesirable
+  # between 1 and 4/3).
+  beta: 0.1
+  desirable_weight: 1.0
+  undesirable_weight: 1.0
+  max_length: 1024
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 5.0e-7
+  lr_scheduler_type: linear # any transformers SchedulerType; see trl_sft.yaml for options
+  lr_scheduler_kwargs: null
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

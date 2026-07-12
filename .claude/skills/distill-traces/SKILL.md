@@ -22,6 +22,21 @@ ambiguity, `docs/001-architecture.md` wins.
 Distillation discipline in one line: split before you collect, verify before you
 accept, hold out before you claim.
 
+**Two distillation modes — pick deliberately.** This skill's loop is
+**OFF-policy**: the student imitates fixed teacher traces via `trainer=trl_sft`
+(cheap; no teacher at training time; the student never sees its own mistakes —
+worked example: `002-distill-off-policy`). **ON-policy** is `trainer=trl_gkd`:
+the student samples its own completions and a live `model.teacher` (same
+tokenizer) grades them token-level via generalized JSD — costlier (generation +
+two resident models) but free of train/inference distribution mismatch (worked
+example: `003-distill-on-policy`; the 002/003 pair differs by exactly that one
+variable). Start off-policy; go on-policy when the off-policy student plateaus
+with exposure-bias symptoms (clean imitation that collapses on its own
+rollouts). **SELF-distillation** (STaR/RFT — no external teacher: the model
+trains on its OWN verifier-accepted rollouts) is this skill's loop with model =
+teacher = student; worked end-to-end example: `004-self-distill`
+(`src/data/self_distill.py` + `prep-self-distill.py`).
+
 Blocking-gate rule: Never write results.md or report success unless
 `intern.py verify` exited 0. A failed gate means the run failed, regardless of
 loss.

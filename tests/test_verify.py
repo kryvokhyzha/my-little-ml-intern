@@ -373,6 +373,28 @@ def test_dpo_task_skips_lm_checks(tmp_path):
     assert results["generation_sanity"].status == "SKIP"
 
 
+def test_kto_task_skips_lm_checks_like_dpo(tmp_path):
+    exp = tmp_path / "001-demo"
+    log = build_run(exp, train_loss=0.5, samples=None)
+    log.append_event("meta", key="task", value="trl_kto")
+
+    results = by_name(RunVerifier(exp).run())
+    assert results["loss_plausibility"].status == "SKIP"
+    assert results["generation_sanity"].status == "SKIP"
+
+
+def test_gkd_task_expects_samples_but_skips_lm_loss(tmp_path):
+    # GKD loss is generalized JSD (not vocab CE) -> loss_plausibility SKIPs even at 0.5;
+    # but the student IS a generator -> missing samples.jsonl must FAIL, not skip.
+    exp = tmp_path / "001-demo"
+    log = build_run(exp, train_loss=0.5, samples=None)
+    log.append_event("meta", key="task", value="trl_gkd")
+
+    results = by_name(RunVerifier(exp).run())
+    assert results["loss_plausibility"].status == "SKIP"
+    assert results["generation_sanity"].status == "FAIL"
+
+
 def test_red_flag_fires_without_vocab(tmp_path):
     exp = tmp_path / "001-demo"
     build_run(exp, train_loss=0.5, vocab_meta=None)

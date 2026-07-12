@@ -25,7 +25,7 @@ MIN_SAMPLE_CHARS = 50
 _LM_TASKS = (None, "trl_sft")
 # GRPO loss is not vocab cross-entropy, but its policy IS a generative LM and the
 # adapter writes samples — so missing samples fail the gate for it too.
-_GENERATION_TASKS = (None, "trl_sft", "trl_grpo")
+_GENERATION_TASKS = (None, "trl_sft", "trl_grpo", "trl_gkd")
 
 _STDERR_FATAL_RE = re.compile(r"Traceback|RuntimeError|CUDA out of memory")
 _STDERR_WARNING_RE = re.compile(r"warn", re.IGNORECASE)

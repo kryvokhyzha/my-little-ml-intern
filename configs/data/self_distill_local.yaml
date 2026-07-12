@@ -1,0 +1,13 @@
+# Local DatasetDict materialized by scripts/python/prep-self-distill.py:
+# train = the model's OWN verified rollouts ({prompt, completion}), test = gold
+# answers on held-out eval tasks (loss proxy; the real metric is the verifier
+# success rate via prep-self-distill.py eval_model_path=...).
+path: ${experiment_dir}/data
+train:
+  _target_: data.loading.load_split
+  dataset: ${data.path}
+  split: train
+eval:
+  _target_: data.loading.load_split
+  dataset: ${data.path}
+  split: test

@@ -9,7 +9,7 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 
 from data.loading import validate_columns
-from training.models import load_model, load_ref_model, load_tokenizer, peft_config
+from training.models import load_model, load_ref_model, load_teacher_model, load_tokenizer, peft_config
 from training.runtime import apply_tracking_env, is_main_process, run_with_stderr_tee, smoke_enabled
 from training.sampling import resolve_sample_prompts, write_samples
 from training.trl.config import apply_smoke, build_args, final_train_loss, write_meta
@@ -30,6 +30,7 @@ def _run_trl(
     cfg: DictConfig,
     trainer_cls: type,
     dpo: bool = False,
+    gkd: bool = False,
     reward_funcs: list[Callable[..., Any]] | None = None,
 ) -> dict[str, Any]:
     from intern.callbacks import AlertRules, TRLAlertCallback
@@ -88,6 +89,8 @@ def _run_trl(
     }
     if dpo:
         kwargs["ref_model"] = load_ref_model(cfg)
+    if gkd:
+        kwargs["teacher_model"] = load_teacher_model(cfg)
     if grpo:
         kwargs["reward_funcs"] = reward_funcs
     trainer = trainer_cls(**kwargs)
@@ -98,7 +101,7 @@ def _run_trl(
         if "quantization_config" in cfg.model.main:
             mlog.append_event("meta", key="quantized", value=True)
 
-    lane = "GRPO" if grpo else ("DPO" if dpo else "SFT")
+    lane = "GRPO" if grpo else ("DPO" if dpo else ("GKD" if gkd else "SFT"))
     logger.info("Starting {} run (smoke={}) in {}", lane, smoke, experiment_dir)
     run_with_stderr_tee(trainer.train, experiment_dir)
 
@@ -142,3 +145,22 @@ def run_grpo(cfg: DictConfig) -> dict[str, Any]:
     from trl import GRPOTrainer
 
     return _run_trl(cfg, GRPOTrainer, reward_funcs=reward_funcs)
+
+
+def run_kto(cfg: DictConfig) -> dict[str, Any]:
+    """Unpaired preference alignment (KTO): per-example desirable/undesirable labels, no pairs needed."""
+    from trl import KTOTrainer
+
+    # KTO uses a reference model exactly like DPO (model.ref optional; TRL clones one when absent).
+    return _run_trl(cfg, KTOTrainer, dpo=True)
+
+
+def run_gkd(cfg: DictConfig) -> dict[str, Any]:
+    """On-policy distillation: student samples, the teacher supervises token-level (GKD)."""
+    import os
+
+    # GKD is trl.experimental on TRL 1.7; the import warning is noise in train logs.
+    os.environ.setdefault("TRL_EXPERIMENTAL_SILENCE", "1")
+    from trl.experimental.gkd import GKDTrainer
+
+    return _run_trl(cfg, GKDTrainer, gkd=True)

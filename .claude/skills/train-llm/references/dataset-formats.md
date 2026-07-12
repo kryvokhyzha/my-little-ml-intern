@@ -7,7 +7,9 @@ against this table before any GPU spend — the check costs seconds.
 | ------ | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
 | SFT    | `trainer=trl_sft`  | `messages` (list of `{"role": ..., "content": ...}` dicts) — preferred; OR plain `text`; OR `prompt` + `completion`        |
 | DPO    | `trainer=trl_dpo`  | `chosen` + `rejected` required, exact names; `prompt` strongly recommended (TRL's implicit-prompt format works without it) |
+| KTO    | `trainer=trl_kto`  | `prompt` + `completion` + `label` (bool) — unpaired per-example feedback; no chosen/rejected pairing needed                |
 | GRPO   | `trainer=trl_grpo` | `prompt` only — prompt-only data; completions are generated during training and reward functions grade them                |
+| GKD    | `trainer=trl_gkd`  | `messages` — conversational; the student samples completions in-loop and the live `model.teacher` grades them token-level  |
 
 Notes:
 

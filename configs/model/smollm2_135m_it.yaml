@@ -1,0 +1,11 @@
+# Instruct-tuned tiny student for the distillation examples. On-policy (GKD)
+# experiments add a `model.teacher` node under `_self_` — teacher must share
+# this tokenizer (e.g. HuggingFaceTB/SmolLM2-360M-Instruct).
+main:
+  _target_: transformers.AutoModelForCausalLM.from_pretrained
+  _args_: ["HuggingFaceTB/SmolLM2-135M-Instruct"]
+  dtype: float32
+
+tokenizer:
+  _target_: transformers.AutoTokenizer.from_pretrained
+  _args_: ["${model.main._args_[0]}"]

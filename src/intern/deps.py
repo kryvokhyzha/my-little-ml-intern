@@ -96,8 +96,24 @@ def _upload_time_for(releases: dict[str, datetime], target: Version) -> datetime
     return None
 
 
+def _exception_expiry(exceptions: dict, package: str) -> date | None:
+    raw = exceptions.get(package)
+    if raw is None:
+        return None
+    try:
+        return raw if isinstance(raw, date) else date.fromisoformat(str(raw))
+    except ValueError:
+        logger.warning("Unparsable deps exception date for {}: {!r} — ignored", package, raw)
+        return None
+
+
 def check_project(pyproject_path: Path | str, min_age_days: int = 7) -> list[str]:
     """Check ``[project].dependencies`` floors against the PyPI dependency-age gate.
+
+    A deliberate one-time override lives in pyproject as a DATED, SELF-EXPIRING entry —
+    ``[tool.intern.deps.exceptions]`` with ``package = "YYYY-MM-DD"`` — which downgrades
+    that package's young-floor violation to a visible ``info:`` line until the date
+    passes. The exception is in the diff (human-reviewed) and disarms itself.
 
     Returns:
         Violation strings for floors younger than ``min_age_days``, plus ``info:``-prefixed
@@ -105,6 +121,7 @@ def check_project(pyproject_path: Path | str, min_age_days: int = 7) -> list[str
 
     """
     data = tomllib.loads(Path(pyproject_path).read_text(encoding="utf-8"))
+    exceptions = data.get("tool", {}).get("intern", {}).get("deps", {}).get("exceptions", {})
     cutoff = _cutoff(min_age_days)
     lines: list[str] = []
     unreachable = 0
@@ -128,10 +145,18 @@ def check_project(pyproject_path: Path | str, min_age_days: int = 7) -> list[str
             lines.append(f"info: {requirement.name}: declared floor {floor} not found on PyPI")
         elif uploaded > cutoff:
             age_days = (datetime.now(timezone.utc) - uploaded).days
-            lines.append(
-                f"{requirement.name}: declared floor {floor} is {age_days} days old"
-                f" (< {min_age_days} days, released {uploaded.date().isoformat()})"
-            )
+            expiry = _exception_expiry(exceptions, requirement.name)
+            if expiry is not None and datetime.now(timezone.utc).date() <= expiry:
+                lines.append(
+                    f"info: {requirement.name}: floor {floor} is {age_days} days old but ALLOWED by a"
+                    f" dated exception until {expiry.isoformat()} ([tool.intern.deps.exceptions])"
+                )
+            else:
+                suffix = f"; exception expired {expiry.isoformat()} — remove it" if expiry is not None else ""
+                lines.append(
+                    f"{requirement.name}: declared floor {floor} is {age_days} days old"
+                    f" (< {min_age_days} days, released {uploaded.date().isoformat()}){suffix}"
+                )
         best = _latest_eligible(releases, cutoff)
         if best is not None and Version(best[0]) > floor:
             lines.append(f"info: {requirement.name}: newer eligible version {best[0]} (declared floor {floor})")

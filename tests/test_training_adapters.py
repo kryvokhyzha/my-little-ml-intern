@@ -37,7 +37,7 @@ class TestReportTo:
 class TestApplySmoke:
     def test_smoke_slices_and_overrides(self, dataset):
         args, sliced = _apply_smoke({}, dataset, smoke=True)
-        assert args == {"max_steps": 1, "save_strategy": "no"}
+        assert args == {"max_steps": 1, "save_strategy": "no", "logging_steps": 1}
         assert len(sliced) == 32
         assert sliced[0] == dataset[0]
 
@@ -174,6 +174,24 @@ class TestPeftConfig:
         assert peft_config(OmegaConf.create({"trainer": {"peft": None}})) is None
 
 
+class TestLoadTeacherModel:
+    def test_missing_teacher_raises_with_actionable_message(self):
+        from training.models import load_teacher_model
+
+        with pytest.raises(ValueError, match="model.teacher"):
+            load_teacher_model(OmegaConf.create({"model": {"main": {}}}))
+
+    def test_teacher_node_instantiates(self, monkeypatch):
+        import training.models as models
+        from training.models import load_teacher_model
+
+        captured = {}
+        monkeypatch.setattr(models, "_instantiate_model", lambda node: captured.update(node) or "teacher-obj")
+        cfg = OmegaConf.create({"model": {"teacher": {"_target_": "x.y", "_args_": ["repo/teacher"]}}})
+        assert load_teacher_model(cfg) == "teacher-obj"
+        assert captured["_args_"] == ["repo/teacher"]
+
+
 class FakeMetricsLog:
     def __init__(self):
         self.events = []
@@ -282,6 +300,18 @@ class TestValidateColumns:
         _validate_columns(Dataset.from_dict({"prompt": ["p"]}), "trl_grpo", "train")
         with pytest.raises(ValueError, match="prompt"):
             _validate_columns(Dataset.from_dict({"text": ["t"]}), "trl_grpo", "train")
+
+    def test_gkd_requires_messages(self):
+        _validate_columns(Dataset.from_dict({"messages": [[]]}), "trl_gkd", "train")
+        with pytest.raises(ValueError, match="messages"):
+            _validate_columns(Dataset.from_dict({"prompt": ["p"], "completion": ["c"]}), "trl_gkd", "train")
+
+    def test_kto_requires_unpaired_label(self):
+        _validate_columns(
+            Dataset.from_dict({"prompt": ["p"], "completion": ["c"], "label": [True]}), "trl_kto", "train"
+        )
+        with pytest.raises(ValueError, match="label"):
+            _validate_columns(Dataset.from_dict({"prompt": ["p"], "completion": ["c"]}), "trl_kto", "train")
 
     def test_unknown_task_is_not_checked(self):
         _validate_columns(Dataset.from_dict({"anything": ["x"]}), "lightning", "train")

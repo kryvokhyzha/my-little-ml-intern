@@ -1,0 +1,39 @@
+# @package _global_
+# ON-policy distillation (GKD): the student samples its own completions and the
+# teacher supervises token-level via generalized JSD — no train/inference
+# distribution mismatch. Controlled pair with 002-distill-off-policy — same
+# student, same dataset; only the distillation method (and the live teacher) differ.
+defaults:
+  - main
+  - model: smollm2_135m_it
+  - data: smoltalk_everyday
+  - trainer: trl_gkd
+  - tracking: trackio
+  - compute: ssh # remote-first: local Mac is resource-constrained (smokes stay local)
+  - budget: default
+  - _self_
+
+experiment_name: 003-distill-on-policy
+
+model:
+  # GKD needs the teacher LIVE at training time (token-level supervision); it must
+  # share the student's tokenizer — same family, ~2.7x params.
+  teacher:
+    _target_: transformers.AutoModelForCausalLM.from_pretrained
+    _args_: ["HuggingFaceTB/SmolLM2-360M-Instruct"]
+    dtype: float32
+
+trainer:
+  planned_tokens: 1500000 # estimate — tune from num_input_tokens_seen after run 1
+  args:
+    max_steps: 300
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 4
+    learning_rate: 5.0e-5
+    max_length: 1024
+    max_new_tokens: 128
+    eval_strategy: steps
+    eval_steps: 50
+    save_strategy: steps
+    save_steps: 150
+    logging_steps: 5

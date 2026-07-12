@@ -1,0 +1,39 @@
+# On-policy distillation (GKD, Agarwal et al. 2023): the student samples completions and
+# the teacher supervises token-level via generalized JSD — vs OFF-policy distillation,
+# which is plain trl_sft on teacher-generated data. Requires a `model.teacher` node
+# (same shape as model.main; teacher and student must share a tokenizer) and a
+# `messages`-format dataset. GKD is trl.experimental on TRL 1.7.
+kind: trl_gkd
+planned_tokens: null
+peft: null
+# args is an instantiate node: ANY GKDConfig / SFTConfig / TrainingArguments field can
+# be added here without code changes — this file ships the recipe defaults, not the
+# full surface. Do NOT set teacher_model_name_or_path / teacher_model_init_kwargs:
+# the teacher is owned by the `model.teacher` node (loaded via models.load_teacher_model).
+args:
+  _target_: trl.experimental.gkd.GKDConfig
+  output_dir: ${experiment_dir}/ckpts
+  # lmbda = fraction of steps trained on STUDENT-generated (on-policy) sequences;
+  # 0.0 = pure off-policy (supervised KD), 1.0 = pure on-policy.
+  lmbda: 0.5
+  # beta interpolates the generalized JSD: 0.0 = forward KL, 1.0 = reverse KL (mode-seeking).
+  beta: 0.5
+  temperature: 0.9
+  max_new_tokens: 128
+  # seq_kd: sequence-level KD — the TEACHER generates the targets and the student does
+  # supervised CE on them (off-policy-from-teacher-generations, inside the same trainer).
+  seq_kd: false
+  disable_dropout: true
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 2.0e-5
+  lr_scheduler_type: cosine
+  lr_scheduler_kwargs: null
+  warmup_ratio: 0.03
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

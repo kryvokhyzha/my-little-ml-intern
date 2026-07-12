@@ -22,6 +22,8 @@ def apply_smoke(args_dict: dict[str, Any], dataset: Dataset | None, smoke: bool)
         return args_dict, dataset
     args_dict["max_steps"] = 1
     args_dict["save_strategy"] = "no"
+    # A 1-step smoke must log its one step, or the verdict prints final_train_loss=None.
+    args_dict["logging_steps"] = 1
     if dataset is not None:
         dataset = dataset.select(range(min(32, len(dataset))))
     return args_dict, dataset

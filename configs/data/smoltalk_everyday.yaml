@@ -1,0 +1,15 @@
+# HuggingFaceTB/smoltalk, everyday-conversations subset (~2.3k train / 119 test,
+# `messages` column). Itself distilled data (completions written by larger models),
+# which makes it a natural teacher corpus for the distillation examples. The `name:`
+# key is a loader kwarg forwarded by load_split to datasets.load_dataset.
+path: HuggingFaceTB/smoltalk
+train:
+  _target_: data.loading.load_split
+  dataset: ${data.path}
+  split: train
+  name: everyday-conversations
+eval:
+  _target_: data.loading.load_split
+  dataset: ${data.path}
+  split: test
+  name: everyday-conversations

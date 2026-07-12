@@ -248,13 +248,13 @@ Checks are task-aware via the `task` meta (`trl_sft` and unknown count as LM
 tasks) and scoped to the last `run_start`. Defaults (SKIP when inputs absent
 unless stated):
 
-1. `loss_plausibility` — LM tasks only (SKIP for `trl_dpo`/`trl_grpo`/
-   `lightning` — their loss is not vocab cross-entropy): final train loss ∈
-   (0.1·ln(V), ln(V)), V = `vocab_size`; loss < 1.0 is a red-flag FAIL even when
-   V is unknown. SKIPs (before the task/vocab logic) when the `completion_only`
-   meta is truthy — completion-only SFT loss is over assistant-target tokens
-   only, so the band and the <1.0 red-flag do not apply; lean on
-   `eval_train_gap`, `generation_sanity`, and held-out eval instead.
+1. `loss_plausibility` — LM tasks only (SKIP for `trl_dpo`/`trl_kto`/`trl_grpo`/
+   `trl_gkd`/`lightning` — their loss is not vocab cross-entropy): final train
+   loss ∈ (0.1·ln(V), ln(V)), V = `vocab_size`; loss < 1.0 is a red-flag FAIL
+   even when V is unknown. SKIPs (before the task/vocab logic) when the
+   `completion_only` meta is truthy — completion-only SFT loss is over
+   assistant-target tokens only, so the band and the <1.0 red-flag do not apply;
+   lean on `eval_train_gap`, `generation_sanity`, and held-out eval instead.
 2. `eval_train_gap` — |final eval loss − final train loss| < 0.5; eval loss is
    `loss(split=eval)`, `eval_loss`, or `val_loss` (Lightning).
 3. `data_consumption` — final `num_input_tokens_seen` ≥ 0.7 × `planned_tokens`.
@@ -359,14 +359,15 @@ A low loss number is never evidence the model works.
 ## src/training API
 
 Layout: `training/trl/` is the TRL subpackage (`rewards.py`, `config.py`,
-`run.py`; `run_sft`/`run_dpo`/`run_grpo` re-exported from `training.trl`).
-Framework-neutral plumbing is shared, not owned by a lane: `training/runtime.py`
-(stderr tee, `is_main_process`, `smoke_enabled`, `apply_tracking_env` — maps
-`tracking.project`/`tracking.group` onto `WANDB_PROJECT`/`WANDB_RUN_GROUP` for
-the wandb callback; trackio takes `TrainingArguments.project` via `build_args`),
-`training/models.py` (`load_model` with dtype/quant, `peft_config`),
-`training/sampling.py` (`SAMPLE_PROMPTS`, `write_samples`). Dataset loading
-lives in `data/` (`data.loading.load_split` / `validate_columns`,
+`run.py`; `run_sft`/`run_dpo`/`run_grpo`/`run_gkd`/`run_kto` re-exported from
+`training.trl`). Framework-neutral plumbing is shared, not owned by a lane:
+`training/runtime.py` (stderr tee, `is_main_process`, `smoke_enabled`,
+`apply_tracking_env` — maps `tracking.project`/`tracking.group` onto
+`WANDB_PROJECT`/`WANDB_RUN_GROUP` for the wandb callback; trackio takes
+`TrainingArguments.project` via `build_args`), `training/models.py`
+(`load_model` with dtype/quant, `peft_config`), `training/sampling.py`
+(`SAMPLE_PROMPTS`, `write_samples`). Dataset loading lives in `data/`
+(`data.loading.load_split` / `validate_columns`,
 `data.synthetic.build_tiny_text_dataset`). The `lightning_adapter` imports the
 shared modules directly — never TRL internals.
 
@@ -399,6 +400,24 @@ shared modules directly — never TRL internals.
   floor reward, never raise. `TRLAlertCallback` attached, meta written
   (`task=trl_grpo`), samples still generated post-run (the policy is an LM),
   same rank-zero + stderr-tee + `VERDICT` contract.
+- `training.trl.run_kto(cfg) -> dict` — unpaired preference alignment via
+  `KTOConfig`/`KTOTrainer` (stable since TRL 1.8): per-example
+  `prompt`+`completion`+`label` rows (`validate_columns` contract), reference
+  model exactly like DPO (optional `model.ref`; TRL clones one when absent),
+  KTO-specific args `beta`/`desirable_weight`/`undesirable_weight`. Same
+  callback/meta/tee/`VERDICT` contract; like DPO it is neither an LM task
+  (loss_plausibility SKIPs) nor a generation task.
+- `training.trl.run_gkd(cfg) -> dict` — ON-policy distillation via
+  `trl.experimental.gkd` `GKDConfig`/`GKDTrainer` (TRL 1.7 keeps GKD
+  experimental; the adapter silences the import warning). Requires a
+  `model.teacher` node (same shape as `model.main`; teacher and student must
+  share a tokenizer — `training.models.load_teacher_model` raises otherwise) and
+  a `messages`-format dataset (`validate_columns` task contract). Key args:
+  `lmbda` (fraction of steps on student-sampled sequences), `beta` (JSD
+  interpolation: 0 forward KL, 1 reverse KL), `temperature`, `max_new_tokens`.
+  OFF-policy distillation needs no lane — it is `run_sft` on teacher-generated
+  data. Worked pair: `002-distill-off-policy` / `003-distill-on-policy` (same
+  student + dataset, method is the single variable).
 - Quantization: a `quantization_config:` nested
   `_target_: transformers.BitsAndBytesConfig` node inside `model.main` (use a
   dedicated `<name>_4bit.yaml` model variant); requires the `gpu` dependency
@@ -537,11 +556,13 @@ checkpoint-dtype trap); `tokenizer:` (interpolates the model repo via
 `${model.main._args_[0]}`). Quantized variants are separate files
 (`<name>_4bit.yaml`), mirroring the trainer-preset pattern.
 
-Two optional model keys are omitted from the shipped configs and added per
+Three optional model keys are omitted from the shipped configs and added per
 experiment only when needed: `ref:` (same shape as `main`, the DPO reference
 model — DPO experiments set it under `_self_` or a dedicated model file; absent
-elsewhere) and `target_params:` (an int enabling the opt-in `param_drift` verify
-check; absent means that check SKIPs).
+elsewhere), `teacher:` (same shape as `main`, the live GKD teacher for
+`trainer=trl_gkd`; must share the student's tokenizer — see
+`003-distill-on-policy`), and `target_params:` (an int enabling the opt-in
+`param_drift` verify check; absent means that check SKIPs).
 
 **data group** (`configs/data/<name>.yaml`) — `train:` and `eval:` are Hydra
 `_target_` instantiate nodes (mirroring the model group); `eval: null` = no
@@ -554,8 +575,9 @@ adapter injects `for_eval=True` into `load_split` eval nodes (plain on-disk
 Dataset + eval = refused) and validates columns per task
 (`data.loading.validate_columns`: SFT needs `text`/`dataset_text_field`,
 `prompt`+`completion`, or `messages`; DPO needs `chosen`+`rejected`; GRPO needs
-`prompt`). Optional `sample_prompts` overrides the generation-sanity probe with
-fixed raw strings; omit it (shipped configs do) and
+`prompt`; GKD needs `messages`; KTO needs `prompt`+`completion`+`label`).
+Optional `sample_prompts` overrides the generation-sanity probe with fixed raw
+strings; omit it (shipped configs do) and
 `training.sampling.resolve_sample_prompts` picks the probe automatically —
 held-out prompts from the eval/train `prompt` column for prompt/completion data
 (rendered in the model's chat format, so `add_special_tokens=False`), else the
@@ -580,8 +602,11 @@ lane), `peft._target_: peft.LoraConfig` — so every group declares the class it
 builds. `build_args`/`peft_config` (and the lightning adapter) instantiate them
 and inject the runtime values the config can't know (tracking wiring,
 hardware-aware bf16, smoke overrides, logger/callbacks/alert flags), which is
-the guardrail layer's value-add. Presets stack by inheritance: `trl_sft` (full
-FT) → `trl_sft_lora` (LoRA) → `trl_sft_qlora` (paged optimizer + bf16; compose a
+the guardrail layer's value-add. Because `args` is an instantiate node, **any**
+field of the declared config class is settable from YAML with no code change —
+the shipped trainer files carry curated recipe defaults, not the exhaustive
+parameter surface. Presets stack by inheritance: `trl_sft` (full FT) →
+`trl_sft_lora` (LoRA) → `trl_sft_qlora` (paged optimizer + bf16; compose a
 `_4bit` model). Model identity/loading lives in `model`; dataset identity in
 `data`. `main.yaml` provides `seed`, `project_name`, `experiment_name`,
 `experiment_dir`, `smoke_test`. Tracking backend is never hardcoded in code —
@@ -623,11 +648,11 @@ TrackioCallback hardcodes its init call and cannot forward it).
 v1 skills: `new-experiment`, `train-llm`, `verify-run`, `track-experiments`,
 `literature-recipe-research`, `autoresearch-loop`, `publish-model`,
 `distill-traces` (+ template's `new-doc`, `new-script`). Trainer lanes:
-`trl_sft`, `trl_dpo`, `trl_grpo`, `lightning`, `axolotl`. Roadmap:
-`eval-harness`, OpenEnv env-GRPO (environment-based rollouts), `add-dependency`,
-`compare-experiments` CLI, `promote` CLI, `sync-agents-md` (AGENTS.md table
-generator + pre-commit staleness check). Dropped: `experiment-ledger`
-(superseded — within-experiment discipline lives in
+`trl_sft`, `trl_dpo`, `trl_kto`, `trl_grpo`, `trl_gkd`, `lightning`, `axolotl`.
+Roadmap: `eval-harness`, OpenEnv env-GRPO (environment-based rollouts),
+`add-dependency`, `compare-experiments` CLI, `promote` CLI, `sync-agents-md`
+(AGENTS.md table generator + pre-commit staleness check). Dropped:
+`experiment-ledger` (superseded — within-experiment discipline lives in
 train-llm/verify-run/track-experiments; cross-path orchestration is
 autoresearch-loop) and `notify-milestones` (covered by notify.sh and the skills
 that call it).

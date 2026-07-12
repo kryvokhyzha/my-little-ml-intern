@@ -44,7 +44,7 @@ dependencies = [
     "torch ~= 2.12.1",
     "lightning ~= 2.6.5",
     "transformers ~= 5.12.1",
-    "trl ~= 1.7.0",
+    "trl ~= 1.8.0",
     "peft ~= 0.19.1",
     "datasets ~= 5.0.0",
     "accelerate ~= 1.14.0",
@@ -109,6 +109,12 @@ explicit = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.intern.deps]
+# Dated, SELF-EXPIRING one-time exceptions to the >=1-week dependency-age gate —
+# NOT a rule change. The gate downgrades the violation to info: until the date,
+# then re-arms itself; remove entries once expired.
+exceptions = { trl = "2026-07-16" } # 1.8.0 released 2026-07-09;
 
 [tool.ruff]
 line-length = 120

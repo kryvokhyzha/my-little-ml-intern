@@ -78,9 +78,16 @@ a mermaid pipeline, and in/kept/split row counts (see `docs/001-architecture.md`
 - `trainer=trl_sft` — default for instruction tuning / LM fine-tuning on HF
   models via TRL `SFTTrainer`.
 - `trainer=trl_dpo` — preference alignment on prompt/chosen/rejected data.
+- `trainer=trl_kto` — preference alignment from UNPAIRED binary feedback
+  (prompt/completion/label rows — thumbs-up/down data works directly, no pairs);
+  reference model like DPO (optional `model.ref`).
 - `trainer=trl_grpo` — online RL (GRPO) on prompt-only data: completions are
   sampled in-loop and graded by `trainer.reward_funcs`; read
   `references/grpo-rewards.md` before writing any reward function.
+- `trainer=trl_gkd` — ON-policy distillation (GKD) on `messages` data: the
+  student samples, a live `model.teacher` (same tokenizer) supervises
+  token-level via generalized JSD. OFF-policy distillation is plain `trl_sft` on
+  teacher-generated data — see the distill-traces skill for the choice.
 - `trainer=lightning` — custom architectures or loops that don't fit an HF
   Trainer; module/datamodule instantiated from config.
 - `trainer=axolotl` — YAML-recipe training rendered locally, executed on a

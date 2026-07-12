@@ -1,0 +1,22 @@
+# @package _global_
+# Run-once self-distillation collection for experiment 004 (also its evaluator).
+# collect (default): baseline eval-task success rate, k rollouts per TRAIN task,
+# traces -> experiments/004-self-distill/traces/, accepted -> DatasetDict on disk.
+# eval: set eval_model_path=<ckpt dir> to measure the post-train success rate.
+defaults:
+  - main
+  - model: smollm2_360m_it
+  - _self_
+
+experiment_name: 004-self-distill
+
+n_tasks: 300
+eval_fraction: 0.2
+k_samples: 4
+max_new_tokens: 32
+gen_temperature: 0.7
+# smoke cap: limit TRAIN tasks rolled out and EVAL tasks scored (null = all)
+limit_tasks: null
+# path to a fine-tuned checkpoint -> eval-only mode (post-train success rate)
+eval_model_path: null
+dry_run: false

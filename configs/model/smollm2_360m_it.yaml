@@ -1,0 +1,10 @@
+# Mid-size SmolLM2 instruct model. Used as the GKD teacher (003) and as the
+# self-distillation subject (004 — the same model generates AND is trained).
+main:
+  _target_: transformers.AutoModelForCausalLM.from_pretrained
+  _args_: ["HuggingFaceTB/SmolLM2-360M-Instruct"]
+  dtype: float32
+
+tokenizer:
+  _target_: transformers.AutoTokenizer.from_pretrained
+  _args_: ["${model.main._args_[0]}"]

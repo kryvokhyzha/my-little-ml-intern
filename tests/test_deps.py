@@ -88,6 +88,37 @@ def test_declared_floor_extraction():
     assert deps._declared_floor(Requirement("x < 3.0")) is None
 
 
+def test_dated_exception_downgrades_violation_until_expiry(monkeypatch, tmp_path):
+    _install_pypi(monkeypatch, {"pkga": {"releases": {"1.2.0": [_release(2)]}}})
+    # expiry is evaluated against the UTC date (inclusive) — build both sides in UTC
+    future = (_now().date() + timedelta(days=3)).isoformat()
+    past = (_now().date() - timedelta(days=2)).isoformat()
+
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        f"""
+[project]
+name = "demo"
+version = "0.0.1"
+dependencies = ["pkga ~= 1.2.0"]
+
+[tool.intern.deps]
+exceptions = {{ pkga = "{future}" }}
+""",
+        encoding="utf-8",
+    )
+    lines = deps.check_project(pyproject, min_age_days=7)
+    assert not [line for line in lines if not line.startswith("info:")]  # no violations
+    assert any("ALLOWED by a dated exception" in line for line in lines)
+
+    # expired exception -> violation returns, with a remove-it hint
+    pyproject.write_text(pyproject.read_text().replace(future, past), encoding="utf-8")
+    lines = deps.check_project(pyproject, min_age_days=7)
+    violations = [line for line in lines if not line.startswith("info:")]
+    assert len(violations) == 1
+    assert "exception expired" in violations[0]
+
+
 def test_check_project_violations_and_info(monkeypatch, tmp_path):
     calls = _install_pypi(
         monkeypatch,

@@ -1,0 +1,35 @@
+# @package _global_
+# OFF-policy distillation: the student imitates FIXED teacher-written completions
+# (plain SFT on distilled data). Controlled pair with 003-distill-on-policy —
+# same student, same dataset; only the distillation method differs.
+defaults:
+  - main
+  - model: smollm2_135m_it
+  - data: smoltalk_everyday
+  - trainer: trl_sft
+  - tracking: trackio
+  - compute: ssh # remote-first: local Mac is resource-constrained (smokes stay local)
+  - budget: default
+  - _self_
+
+experiment_name: 002-distill-off-policy
+
+trainer:
+  planned_tokens: 1500000 # estimate — tune from num_input_tokens_seen after run 1
+  args:
+    max_steps: 300
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 4
+    learning_rate: 5.0e-5
+    max_length: 1024
+    # NOTE on supervision scope: messages-format SFT without masking trains
+    # cross-entropy over the ENTIRE rendered conversation, while 003's GKD
+    # supervises only the final assistant turn — a known, documented scope
+    # difference (see plan.md). `assistant_only_loss: true` would narrow it but
+    # HARD-FAILS here: SmolLM2's chat template lacks `{% generation %}` markers
+    # and TRL cannot auto-patch it (verified by smoke).
+    eval_strategy: steps
+    eval_steps: 50
+    save_strategy: steps
+    save_steps: 150
+    logging_steps: 5
