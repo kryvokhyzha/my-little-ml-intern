@@ -4,7 +4,8 @@
 # Events: plan_ready | code_ready | train_started | train_done (alias: train_finished)
 #         | error | blocker | approval_required
 # Unknown events still send (generic 🔔 card) but warn on stderr — prefer the list above.
-# Message may be multi-line: "- " bullet lines render as lists in both channels.
+# Message may be multi-line: "- " bullet lines are rendered as 🔹 diamond bullets
+# in both channels (write plain "- ", the script prettifies).
 # Experiment (3rd arg, optional) falls back to $NOTIFY_EXPERIMENT.
 # Project name from $PROJECT_NAME / $NOTIFY_PROJECT, else the repo directory name.
 # Channels from env (or project-root .env): TG_BOT_TOKEN+TG_CHAT_ID,
@@ -30,6 +31,9 @@ if [ -f "$env_file" ]; then
   set +a
   set -u
 fi
+
+# Prettify plain "- " bullet lines into diamond bullets on the cards.
+message="$(printf '%s' "$message" | sed 's/^- /🔹 /')"
 
 project="${PROJECT_NAME:-${NOTIFY_PROJECT:-$(basename "$project_root")}}"
 host="$(hostname -s 2>/dev/null || echo unknown)"
@@ -71,7 +75,7 @@ case "$event" in
   approval_required)
     emoji="⏸️"
     label="Approval required"
-    next="Confirm to proceed (headless assumed safe defaults)."
+    next="Proceeding on the assumed default — reply if wrong."
     ;;
   *)
     emoji="🔔"
@@ -101,18 +105,18 @@ json_escape() {
 }
 
 # Telegram (parse_mode=HTML): bold header, code experiment, italic next/meta.
-tg="${emoji} <b>$(html_escape "$label")</b>"$'\n'"<b>$(html_escape "$project")</b>"
-[ -n "$experiment" ] && tg+=" · <code>$(html_escape "$experiment")</code>"
+tg="${emoji} <b>$(html_escape "$label")</b>"$'\n'"<b>Project:</b> $(html_escape "$project")"
+[ -n "$experiment" ] && tg+=" · <b>Exp:</b> <code>$(html_escape "$experiment")</code>"
 [ -n "$message" ] && tg+=$'\n\n'"$(html_escape "$message")"
 [ -n "$next" ] && tg+=$'\n\n'"➡️ <i>$(html_escape "$next")</i>"
-tg+=$'\n'"<i>$(html_escape "${host} · ${stamp}")</i>"
+tg+=$'\n\n'"<i>$(html_escape "${host} · ${stamp}")</i>"
 
 # Slack (mrkdwn): & < > escaped, then the whole payload JSON-escaped.
-sk="${emoji} *$(html_escape "$label")*"$'\n'"*$(html_escape "$project")*"
-[ -n "$experiment" ] && sk+=" · \`$(html_escape "$experiment")\`"
+sk="${emoji} *$(html_escape "$label")*"$'\n'"*Project:* $(html_escape "$project")"
+[ -n "$experiment" ] && sk+=" · *Exp:* \`$(html_escape "$experiment")\`"
 [ -n "$message" ] && sk+=$'\n\n'"$(html_escape "$message")"
 [ -n "$next" ] && sk+=$'\n\n'"➡️ _$(html_escape "$next")_"
-sk+=$'\n'"_$(html_escape "${host} · ${stamp}")_"
+sk+=$'\n\n'"_$(html_escape "${host} · ${stamp}")_"
 
 if [ -n "${NOTIFY_DRY_RUN:-}" ]; then
   printf '%s\n%s\n%s\n%s\n' "--- telegram ---" "$tg" "--- slack ---" "$sk"
