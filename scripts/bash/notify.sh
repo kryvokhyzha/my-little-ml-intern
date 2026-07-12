@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Milestone notifier — Telegram + Slack, formatted per event.
 # Usage: notify.sh <event> "<message>" ["<experiment>"]
-# Events: plan_ready | code_ready | train_started | train_done | error | blocker | approval_required
+# Events: plan_ready | code_ready | train_started | train_done (alias: train_finished)
+#         | error | blocker | approval_required
+# Unknown events still send (generic 🔔 card) but warn on stderr — prefer the list above.
+# Message may be multi-line: "- " bullet lines render as lists in both channels.
 # Experiment (3rd arg, optional) falls back to $NOTIFY_EXPERIMENT.
 # Project name from $PROJECT_NAME / $NOTIFY_PROJECT, else the repo directory name.
 # Channels from env (or project-root .env): TG_BOT_TOKEN+TG_CHAT_ID,
@@ -30,7 +33,9 @@ fi
 
 project="${PROJECT_NAME:-${NOTIFY_PROJECT:-$(basename "$project_root")}}"
 host="$(hostname -s 2>/dev/null || echo unknown)"
-stamp="$(date '+%Y-%m-%d %H:%M' 2>/dev/null || echo '')"
+# Time only, pinned to UTC — the messenger already shows the full local timestamp,
+# and cards from remote VMs would otherwise mix timezones in one thread.
+stamp="$(date -u '+%H:%M UTC' 2>/dev/null || echo '')"
 
 case "$event" in
   plan_ready)
@@ -48,7 +53,7 @@ case "$event" in
     label="Training started"
     next="Monitor metrics & alerts; verify when done."
     ;;
-  train_done)
+  train_done | train_finished)
     emoji="✅"
     label="Training complete"
     next="Run the verify gate before trusting results."
@@ -70,8 +75,10 @@ case "$event" in
     ;;
   *)
     emoji="🔔"
-    label="$event"
+    # Title-case the raw event name (loss_spike -> Loss Spike) so the card stays readable.
+    label="$(printf '%s' "$event" | tr '_' ' ' | awk '{for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2)} 1')"
     next=""
+    echo "notify.sh: unknown event '$event' — sending a generic card (see the usage header for known events)" >&2
     ;;
 esac
 

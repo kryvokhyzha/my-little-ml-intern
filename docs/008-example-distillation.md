@@ -54,6 +54,16 @@ Both smoke on CPU/MPS; the real 300-step runs want a small GPU (003 is
 generation-bound: `lmbda=0.5` of its steps sample up to `max_new_tokens=128`
 from the student).
 
+**Measured (2026-07-12, 1× L4):** each method won its own objective and barely
+moved the other's. 002 halved dataset CE (1.5669 → 0.8151); 003 improved its
+JSD-to-teacher (eval 0.0724 → 0.0672) while dataset CE stayed near base (1.4857,
+teacher's own CE 1.2952 being the distribution-matching anchor) — which
+**falsified** 003's plan as written (its claim metric was dataset CE at equal
+steps) and taught the metric-design lesson recorded in
+[003's results.md](../experiments/003-distill-on-policy/results.md). 004's
+self-distillation lifted held-out task success 0.867 → 0.950
+([004's results.md](../experiments/004-self-distill/results.md)).
+
 ## The knobs that define GKD (`configs/trainer/trl_gkd.yaml`)
 
 - `lmbda` — WHO writes each step's training sequences. Per step, with
@@ -110,7 +120,7 @@ This is the distill-traces skill's loop end-to-end on the smallest honest task
 acceptance) — swap the arithmetic pool for real agent tasks and the same
 machinery carries over.
 
-## The TRL distillation landscape (1.7.1)
+## The TRL distillation landscape (1.8.0)
 
 What TRL itself offers, mapped to this repo. Everything below the stable line
 lives in `trl.experimental` — a lane for any of them is a one-file

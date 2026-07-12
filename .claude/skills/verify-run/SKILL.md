@@ -114,7 +114,9 @@ loss.
      ```
 
      Nonzero exit = no retry; report the postmortem and stop. Never fire
-     `notify.sh train_done` for a run with no passing path.
+     `notify.sh train_done` for a run with no passing path. (notify.sh events
+     are a fixed list — see its usage header; unknown names send a degraded
+     generic card. Summaries: one `- ` bullet line per item.)
 
 6. **Interpret exit codes plainly.**
    - `0` — all checks passed. Step 4 still applies before any success claim.

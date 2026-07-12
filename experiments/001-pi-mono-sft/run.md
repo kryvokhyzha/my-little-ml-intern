@@ -25,7 +25,7 @@ Mirrors `configs/compute/ssh.yaml` security: IP-locked firewall, key-only SSH.
 gcloud compute instances create <VM> \
   --project=<PROJECT> --zone=europe-west4-c \
   --machine-type=g2-standard-8 \
-  --image-family=common-cu124-ubuntu-2204-py310 \
+  --image-family=common-cu129-ubuntu-2204-nvidia-580 \
   --image-project=deeplearning-platform-release \
   --boot-disk-size=200GB --maintenance-policy=TERMINATE --tags=<VM>
 
@@ -44,7 +44,7 @@ SSH="ssh -i <KEY> -o IdentitiesOnly=yes <USER>@<EXTERNAL_IP>"
 
 ```bash
 $SSH "git clone <REPO_URL> ml"
-scp -i <KEY> .env <USER>@<EXTERNAL_IP>:ml/.env   # HF_TOKEN pulls the PRIVATE dataset
+scp -i <KEY> .env <USER>@<EXTERNAL_IP>:ml/.env   # HF_TOKEN pulls the PRIVATE dataset; PROJECT_NAME labels VM cards
 $SSH "cd ml && uv sync --group gpu"              # QLoRA needs bitsandbytes (CUDA-only)
 $SSH "cd ml && bash scripts/bash/gpu_probe.sh"   # expect cuda=1, vram_gb ~= 24
 ```

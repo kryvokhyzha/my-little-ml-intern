@@ -15,7 +15,7 @@ Mirrors `configs/compute/ssh.yaml` security: IP-locked firewall, key-only SSH.
 gcloud compute instances create <VM> \
   --project=<PROJECT> --zone=<ZONE> \
   --machine-type=g2-standard-8 \
-  --image-family=common-cu124-ubuntu-2204-py310 \
+  --image-family=common-cu129-ubuntu-2204-nvidia-580 \
   --image-project=deeplearning-platform-release \
   --boot-disk-size=200GB --maintenance-policy=TERMINATE --tags=<VM>
 gcloud compute firewall-rules create <VM>-ssh --project=<PROJECT> \
@@ -30,7 +30,7 @@ SSH="ssh -i <KEY> -o IdentitiesOnly=yes <USER>@<EXTERNAL_IP>"
 
 ```bash
 $SSH "git clone <REPO_URL> ml"
-scp -i <KEY> .env <USER>@<EXTERNAL_IP>:ml/.env
+scp -i <KEY> .env <USER>@<EXTERNAL_IP>:ml/.env   # set PROJECT_NAME in .env or VM cards get labeled "ml"
 $SSH "cd ml && uv sync && bash scripts/bash/gpu_probe.sh"
 ```
 
@@ -73,3 +73,13 @@ gcloud compute firewall-rules delete <VM>-ssh --project=<PROJECT> -q
 rm -f <KEY> <KEY>.pub
 gcloud compute disks list --project=<PROJECT>   # confirm no orphaned disk left billing
 ```
+
+## Actuals (2026-07-12)
+
+Same VM/session as 002/003 (`mli-distill-l4`, europe-west4-c, 1× L4, image
+family `common-cu129-ubuntu-2204-nvidia-580`). Prep collect: 240 train tasks ×
+k=4 → 960 traces, 726 accepted (75.6%), baseline eval success **0.867**
+(~7 min). Train: 100 steps in **68 s**, completion-only train loss 0.0591.
+Post-train eval on checkpoint-100: success **0.950** (+8.3pp). Verify:
+eval_train_gap waived as structural format mismatch — base model scores 1.483
+CE on the same gold rows (see verify.md). GPU-h recorded: 0.25.

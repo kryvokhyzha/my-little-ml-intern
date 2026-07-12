@@ -15,7 +15,7 @@ Mirrors `configs/compute/ssh.yaml` security: IP-locked firewall, key-only SSH.
 gcloud compute instances create <VM> \
   --project=<PROJECT> --zone=<ZONE> \
   --machine-type=g2-standard-8 \
-  --image-family=common-cu124-ubuntu-2204-py310 \
+  --image-family=common-cu129-ubuntu-2204-nvidia-580 \
   --image-project=deeplearning-platform-release \
   --boot-disk-size=200GB --maintenance-policy=TERMINATE --tags=<VM>
 gcloud compute firewall-rules create <VM>-ssh --project=<PROJECT> \
@@ -30,7 +30,7 @@ SSH="ssh -i <KEY> -o IdentitiesOnly=yes <USER>@<EXTERNAL_IP>"
 
 ```bash
 $SSH "git clone <REPO_URL> ml"
-scp -i <KEY> .env <USER>@<EXTERNAL_IP>:ml/.env
+scp -i <KEY> .env <USER>@<EXTERNAL_IP>:ml/.env   # set PROJECT_NAME in .env or VM cards get labeled "ml"
 $SSH "cd ml && uv sync && bash scripts/bash/gpu_probe.sh"
 ```
 
@@ -59,3 +59,12 @@ gcloud compute firewall-rules delete <VM>-ssh --project=<PROJECT> -q
 rm -f <KEY> <KEY>.pub
 gcloud compute disks list --project=<PROJECT>   # confirm no orphaned disk left billing
 ```
+
+## Actuals (2026-07-12)
+
+Same VM/session as 002 (`mli-distill-l4`, europe-west4-c, 1× L4, image family
+`common-cu129-ubuntu-2204-nvidia-580`). Smoke TRAIN_OK (JSD 0.1082). Real run:
+300 steps in **29.2 min** (generation-bound: ~5.7 s/step vs 002's ~1 s/step),
+final train JSD 0.0678 / eval JSD 0.0672. Verify PASS (loss_plausibility
+auto-skipped for trl_gkd), judgment PASS. GPU-h recorded: 0.55. Shared-metric
+CE of this student on the smoltalk test split lands in results.md.

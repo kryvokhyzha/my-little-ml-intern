@@ -139,6 +139,10 @@ uv run python scripts/python/intern.py ledger --experiment NNN upsert --path-id 
 scripts/bash/notify.sh train_started "<paths> path(s) on <dataset> via <lane>" NNN-<slug>
 ```
 
+notify.sh events are a fixed list (its usage header) — unknown names send a
+degraded generic card. Multi-item bodies (e.g. a cycle summary): one `- ` bullet
+line per item, not a `·`-separated one-liner.
+
 For multi-path plans: launch ONE path first, confirm it trains (loss lines
 appearing, no crash in the first minutes), then launch the rest — batch
 submission multiplies a shared bug across the whole budget.

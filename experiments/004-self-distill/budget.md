@@ -8,6 +8,6 @@ token_budget: null
 
 ## Spent
 
-paths_launched: 0
+paths_launched: 1
 retries_used: 0
-gpu_h_used: 0.0
+gpu_h_used: 0.25
