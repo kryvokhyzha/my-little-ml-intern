@@ -103,6 +103,9 @@ Hydra `model` group, and dataset identity the `data` group, never trainer keys.
 - Pretraining or continued pretraining → read `references/pretraining.md`.
 - Choosing `trainer.args` for a new path → read
   `references/hyperparameter-priors.md` for defensible starting values.
+- Any `model=gemma_*` path (or picking which Gemma) → read `references/gemma.md`
+  (family matrix, chat-template/masking trap, multimodal collators, export
+  targets).
 
 One Hydra override per solution path, per plan.md. The tracking backend is
 always `cfg.tracking.backend` (`tracking=trackio|wandb|none`) — never hardcoded.
