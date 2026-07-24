@@ -128,6 +128,37 @@ Additional conventions:
 - Pin reasonably: prefer `~=` for libraries we track closely, `>=,<` for broad
   ranges.
 
+## Upgrading dependencies (read the changelog first)
+
+`uv run python scripts/python/intern.py deps` lists every dependency with a
+newer **eligible** release (latest, but published ≥ 1 week ago) **and prints
+that package's changelog URL**. Start an upgrade from the release notes, never
+from the version number alone.
+
+1. **Run the gate** to see what is eligible. A package missing from the list is
+   either current or has only releases younger than the 1-week floor — the
+   latter is a wait, not a block (note the date it becomes eligible).
+2. **Read the notes** between the pinned floor and the target for breaking
+   changes, removals, and behavior changes. Check them against what this repo
+   actually calls (`grep -rn "<pkg>" src/ scripts/ configs/`) rather than
+   skimming for scary words.
+3. **Edit the specifier by hand.** A three-part `~=` pin means
+   `>= 1.21.0, < 1.22.0`, so `uv lock --upgrade` alone will NOT move a minor
+   version — that is deliberate (upgrades are decisions), but it means the
+   version string in `pyproject.toml` is the real knob.
+4. **Re-lock and verify**: `uv sync --all-extras --no-install-project`, then
+   `uv run pytest`, then a smoke run
+   (`uv run python scripts/python/000-tiny-sft-smoke.py smoke_test=true`) — its
+   loss is the canonical cross-version regression check.
+5. **Note behavior changes that invalidate recorded numbers.** If the upgrade
+   changes a trainer's loss or masking, past experiment results are no longer
+   comparable across that boundary: say so in the affected `results.md` rather
+   than silently comparing. Re-run the baseline instead.
+
+A deliberate exception to the 1-week floor is a dated, self-expiring entry in
+`[tool.intern.deps.exceptions]` (`package = "YYYY-MM-DD"`) — reviewable in the
+diff, and it re-arms itself. Remove entries once they expire.
+
 ## Hydra configs
 
 - Entry config: `configs/main.yaml`. Compose groups via `defaults:` lists.

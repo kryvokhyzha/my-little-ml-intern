@@ -41,9 +41,9 @@ dependencies = [
     "packaging >= 24.2",
 
     # ML / training
-    "torch ~= 2.12.1",
+    "torch ~= 2.13.0",
     "lightning ~= 2.6.5",
-    "transformers ~= 5.12.1",
+    "transformers ~= 5.14.1",
     "trl ~= 1.8.0",
     "peft ~= 0.19.1",
     "datasets ~= 5.0.0",
@@ -51,11 +51,11 @@ dependencies = [
     "safetensors ~= 0.8.0",
 
     # Tracking
-    "trackio ~= 0.28.0",
-    "wandb ~= 0.28.0",
+    "trackio ~= 0.31.5",
+    "wandb ~= 0.28.1",
 
     # Hub / data transfer
-    "huggingface_hub[hf_xet] ~= 1.21.0",
+    "huggingface_hub[hf_xet] ~= 1.24.0",
     "hf-transfer ~= 0.1.9",
 
     # Other dependencies
@@ -114,7 +114,7 @@ packages = ["src"]
 # Dated, SELF-EXPIRING one-time exceptions to the >=1-week dependency-age gate —
 # NOT a rule change. The gate downgrades the violation to info: until the date,
 # then re-arms itself; remove entries once expired.
-exceptions = { trl = "2026-07-16" } # 1.8.0 released 2026-07-09;
+exceptions = {}
 
 [tool.ruff]
 line-length = 120

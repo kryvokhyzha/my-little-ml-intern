@@ -52,6 +52,18 @@ conversations, GKD on the final assistant turn — plan.md), and this
 teacher/student gap (360M→135M) is small; the paper's wins show up against
 exposure bias on generation tasks, which dataset CE cannot see.
 
+## Version boundary — do not compare these numbers across trl 1.9.0
+
+These JSD figures were produced on **trl 1.8.0**. trl 1.9.0 rewrites GKD's
+on-policy generation path: `generate_on_policy_outputs` drops its
+`pad_token_id` parameter, completion masking switches from pad-id matching to
+`torch.isin` EOS detection plus the prompt attention mask, and the generation
+config gains `top_p: 1.0` (verified by diffing the v1.8.0 and v1.9.0 tags). That
+is a correctness fix — the old pad-id matching corrupted labels when pad ids
+appear in real prompt text — so the newer numbers are the trustworthy ones, but
+they are **not comparable** to the values above. After upgrading, re-run this
+path rather than comparing across the boundary.
+
 ## Next one-variable paths (per plan.md, not launched)
 
 - Stronger teacher: `SmolLM2-1.7B-Instruct` (same tokenizer, one config line).

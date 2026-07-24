@@ -155,6 +155,44 @@ dependencies = [
     assert "pkgc" not in calls  # bare name -> no floor -> no fetch
 
 
+def test_changelog_url_prefers_explicit_label_then_github_fallback():
+    explicit = {"info": {"project_urls": {"Homepage": "https://github.com/o/r", "Changelog": "https://x.dev/news"}}}
+    assert deps._changelog_url(explicit) == "https://x.dev/news"
+    # Most ML packages declare only a GitHub homepage — point at its releases page.
+    assert deps._changelog_url({"info": {"project_urls": {"Homepage": "https://github.com/o/r/"}}}) == (
+        "https://github.com/o/r/releases"
+    )
+    # Underscored/cased labels normalize; non-GitHub homepages yield nothing to link.
+    assert deps._changelog_url({"info": {"project_urls": {"Release_Notes": "https://x.dev/rn"}}}) == "https://x.dev/rn"
+    assert deps._changelog_url({"info": {"project_urls": {"Homepage": "https://x.dev"}}}) is None
+    assert deps._changelog_url({"info": {}}) is None
+
+
+def test_check_project_info_line_carries_changelog_url(monkeypatch, tmp_path):
+    _install_pypi(
+        monkeypatch,
+        {
+            "pkgf": {
+                "releases": {"1.0.0": [_release(60)], "1.1.0": [_release(30)]},
+                "info": {"project_urls": {"Homepage": "https://github.com/acme/pkgf"}},
+            }
+        },
+    )
+    pyproject = tmp_path / "pyproject.toml"
+    pyproject.write_text(
+        """
+[project]
+name = "demo"
+version = "0.0.1"
+dependencies = ["pkgf ~= 1.0.0"]
+""",
+        encoding="utf-8",
+    )
+    (info,) = deps.check_project(pyproject, min_age_days=7)
+    assert "newer eligible version 1.1.0" in info
+    assert "changelog: https://github.com/acme/pkgf/releases" in info
+
+
 def test_check_project_floor_missing_on_pypi(monkeypatch, tmp_path):
     _install_pypi(monkeypatch, {"pkge": {"releases": {"1.0.0": [_release(30)]}}})
     pyproject = tmp_path / "pyproject.toml"

@@ -24,10 +24,14 @@ def _parse_upload_time(raw: str) -> datetime:
     return parsed
 
 
-def _fetch_release_dates(package: str) -> dict[str, datetime]:
-    """Return version -> earliest upload time (UTC), ignoring yanked files."""
+def _fetch_pypi(package: str) -> dict:
+    """Return the raw PyPI JSON payload for a package."""
     with urllib.request.urlopen(PYPI_JSON_URL.format(package=package), timeout=30) as response:
-        payload = json.load(response)
+        return json.load(response)
+
+
+def _release_dates(payload: dict) -> dict[str, datetime]:
+    """Return version -> earliest upload time (UTC), ignoring yanked files."""
     releases: dict[str, datetime] = {}
     for version, files in payload.get("releases", {}).items():
         times = [
@@ -38,6 +42,35 @@ def _fetch_release_dates(package: str) -> dict[str, datetime]:
         if times:
             releases[version] = min(times)
     return releases
+
+
+def _fetch_release_dates(package: str) -> dict[str, datetime]:
+    """Return version -> earliest upload time (UTC), ignoring yanked files."""
+    return _release_dates(_fetch_pypi(package))
+
+
+_CHANGELOG_LABELS = ("changelog", "changes", "release notes", "releasenotes", "whatsnew", "news")
+_SOURCE_LABELS = ("homepage", "source", "source code", "repository", "code")
+
+
+def _changelog_url(payload: dict) -> str | None:
+    """Best-effort release-notes URL for a package, from its PyPI ``project_urls``.
+
+    Prefers an explicit changelog-ish label. Most ML packages we track declare only a
+    GitHub homepage, so fall back to that repo's releases page — where their notes live.
+    """
+    urls = {
+        label.lower().replace("_", " "): url
+        for label, url in (payload.get("info", {}).get("project_urls") or {}).items()
+    }
+    for label in _CHANGELOG_LABELS:
+        if urls.get(label):
+            return urls[label]
+    for label in _SOURCE_LABELS:
+        url = urls.get(label, "")
+        if url and "github.com" in url:
+            return url.rstrip("/") + "/releases"
+    return None
 
 
 def _cutoff(min_age_days: int) -> datetime:
@@ -135,11 +168,12 @@ def check_project(pyproject_path: Path | str, min_age_days: int = 7) -> list[str
         if floor is None:
             continue
         try:
-            releases = _fetch_release_dates(requirement.name)
+            payload = _fetch_pypi(requirement.name)
         except OSError as exc:
             lines.append(f"info: {requirement.name}: PyPI metadata unavailable ({exc})")
             unreachable += 1
             continue
+        releases = _release_dates(payload)
         uploaded = _upload_time_for(releases, floor)
         if uploaded is None:
             lines.append(f"info: {requirement.name}: declared floor {floor} not found on PyPI")
@@ -159,7 +193,11 @@ def check_project(pyproject_path: Path | str, min_age_days: int = 7) -> list[str
                 )
         best = _latest_eligible(releases, cutoff)
         if best is not None and Version(best[0]) > floor:
-            lines.append(f"info: {requirement.name}: newer eligible version {best[0]} (declared floor {floor})")
+            # The changelog URL rides along so the upgrade decision starts from release
+            # notes instead of a version number (see AGENTS.md "Upgrading dependencies").
+            changelog = _changelog_url(payload)
+            notes = f" — changelog: {changelog}" if changelog else ""
+            lines.append(f"info: {requirement.name}: newer eligible version {best[0]} (declared floor {floor}){notes}")
     if unreachable:
         logger.warning("deps check incomplete: {} package(s) unreachable", unreachable)
     return lines
