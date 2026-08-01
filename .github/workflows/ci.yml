@@ -39,6 +39,7 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - run: uv lock --check
+      - run: uv sync --frozen --no-install-project
       - run: uv run --no-sync python scripts/python/intern.py deps
 
   # torch on ubuntu is multi-GB; the uv cache makes reruns cheap.

@@ -150,9 +150,6 @@ specifier it reports a too-young floor merely as
 `==` pins do get a clear message), and it stays silent about upgrades you could
 take.
 
-Migrating another repo to this setup:
-[docs/uv-cooldown-migration-prompt.md](docs/uv-cooldown-migration-prompt.md).
-
 `uv run python scripts/python/intern.py deps` lists every dependency with a
 newer **eligible** release (latest, but published ≥ 1 week ago) **and prints
 that package's changelog URL**. Start an upgrade from the release notes, never
