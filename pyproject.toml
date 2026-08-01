@@ -86,6 +86,8 @@ gpu = [
 ]
 
 [tool.uv]
+required-version = ">=0.9.17"
+exclude-newer = "7 days"
 environments = [
     "sys_platform == 'darwin'",
     "sys_platform == 'linux'",

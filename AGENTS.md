@@ -130,6 +130,29 @@ Additional conventions:
 
 ## Upgrading dependencies (read the changelog first)
 
+Two mechanisms enforce the 1-week freshness rule. Both run at **pre-commit and
+CI time** — there is no scheduled job, because a stale dependency is only
+actionable when someone is editing dependencies.
+
+|                 | `exclude-newer = "7 days"` (`[tool.uv]`)                    | `intern.py deps`                                         |
+| --------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
+| Role            | **enforcement** — blocks the resolution                     | **discovery** — explains it and reports upgrades         |
+| Runs at         | `uv lock` (pre-commit `uv-lock` hook; CI `uv lock --check`) | pre-commit hook on `pyproject.toml` edits; CI `deps` job |
+| Covers          | every package uv resolves, **incl. transitive**             | `[project].dependencies` floors only                     |
+| Too-young floor | unsatisfiable-resolution error                              | names the package, its age, and its release date         |
+| Blind to        | what you could upgrade to (it stays silent)                 | transitive deps (the real attack surface)                |
+
+Neither replaces the other. `exclude-newer` is the supply-chain guard — a
+compromised release arrives as a _transitive_ dependency far more often than as
+a direct one, and only the resolver setting blocks that. But on a **range**
+specifier it reports a too-young floor merely as
+`Because only <pkg><=<old> is available …`, never mentioning the cooldown (exact
+`==` pins do get a clear message), and it stays silent about upgrades you could
+take.
+
+Migrating another repo to this setup:
+[docs/uv-cooldown-migration-prompt.md](docs/uv-cooldown-migration-prompt.md).
+
 `uv run python scripts/python/intern.py deps` lists every dependency with a
 newer **eligible** release (latest, but published ≥ 1 week ago) **and prints
 that package's changelog URL**. Start an upgrade from the release notes, never
@@ -157,7 +180,11 @@ from the version number alone.
 
 A deliberate exception to the 1-week floor is a dated, self-expiring entry in
 `[tool.intern.deps.exceptions]` (`package = "YYYY-MM-DD"`) — reviewable in the
-diff, and it re-arms itself. Remove entries once they expire.
+diff, and it re-arms itself. Remove entries once they expire. uv's native
+equivalent, `exclude-newer-package = { pkg = false }`, is a **permanent**
+opt-out with no expiry, so prefer the dated entry; reach for the uv one only
+when the resolver itself must be unblocked (`uv lock` fails because every
+version satisfying a specifier is too young).
 
 ## Hydra configs
 

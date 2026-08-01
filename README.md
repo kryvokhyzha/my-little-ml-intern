@@ -131,7 +131,9 @@ Copy into your repo:
 2. `src/intern/` — the enforcement library (plus the `src/helper/display` improvements)
 3. `scripts/python/intern.py` and `scripts/bash/` (notify.sh, gpu_probe.sh)
 4. `configs/` groups: `model/`, `data/`, `trainer/`, `tracking/`, `compute/`, `budget/`
-5. the `deps-age` hook from `.pre-commit-config.yaml`
+5. the `deps-age` hook from `.pre-commit-config.yaml`, plus
+   `exclude-newer = "7 days"` under `[tool.uv]` in `pyproject.toml` — the
+   resolver-level supply-chain cooldown that also covers transitive deps
 
 Then run `uv run pytest` to confirm the gates work in place.
 

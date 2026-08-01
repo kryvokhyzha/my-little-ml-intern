@@ -26,6 +26,21 @@ jobs:
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync ruff format --check .
 
+  # Dependency freshness, on every push/PR
+  deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          python-version: "3.13"
+          cache-dependency-glob: uv.lock
+
+      - run: uv lock --check
+      - run: uv run --no-sync python scripts/python/intern.py deps
+
   # torch on ubuntu is multi-GB; the uv cache makes reruns cheap.
   test:
     runs-on: ubuntu-latest

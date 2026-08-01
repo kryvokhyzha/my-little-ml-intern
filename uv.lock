@@ -12,6 +12,10 @@ supported-markers = [
     "sys_platform == 'linux'",
 ]
 
+[options]
+exclude-newer = "2026-07-25T09:46:44.149692Z"
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "accelerate"
 version = "1.14.0"
