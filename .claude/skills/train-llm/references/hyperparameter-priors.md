@@ -1,66 +1,72 @@
 # Hyperparameter priors (post-training)
 
-Distilled from "frontier model training methodologies" (survey of how SmolLM3,
-Kimi K2, DeepSeek-R1, gpt-oss, Hermes 4, Intellect-3 and Trinity were trained):
-https://djdumpling.github.io/2026/01/31/frontier_training.html. These are PRIORS
-for plan.md hypotheses and `trainer.args` — not laws. One override per path;
-verify arbitrates.
+These priors come from the survey "frontier model training methodologies". The
+survey covers the training of SmolLM3, Kimi K2, DeepSeek-R1, gpt-oss, Hermes 4,
+Intellect-3 and Trinity:
+https://djdumpling.github.io/2026/01/31/frontier_training.html. These values are
+PRIORS for plan.md hypotheses and `trainer.args`, not laws. Use one override per
+path. The verify gate arbitrates.
 
 ## SFT learning rate
 
-- Band: roughly one order of magnitude below the pretraining LR; 3e-6–1e-5 won
-  at ~3B scale, and LR > 1e-5 tanked reasoning evals there. The trl_sft default
-  (2e-5) is a tiny-model default — sweep downward first at 1B+.
-- **SFT is short — sweep LR fully.** A full log-spaced sweep [1e-6 .. 1e-4]
-  costs minutes-to-hours; run it instead of arguing about priors.
-- LoRA paths: LR is 10× the full-FT optimum instead — see lora.md.
+- Band: set the LR about one order of magnitude below the pretraining LR. At ~3B
+  scale, 3e-6–1e-5 gave the best results. An LR > 1e-5 degraded the reasoning
+  evals there. The trl_sft default (2e-5) is a tiny-model default. At 1B+, sweep
+  downward first.
+- **SFT is short. Sweep the LR fully.** A full log-spaced sweep [1e-6 .. 1e-4]
+  costs minutes to hours. Run the sweep. Do not argue about the priors.
+- LoRA paths: use 10× the full-FT optimum instead. See lora.md.
 - AdamW β1 0.9 / β2 0.95, weight decay 0.1 (or 0.01), grad clip 1.0, warmup 1–5%
-  of steps: the boring defaults every frontier run still uses.
-- LR schedule: set `trainer.args.lr_scheduler_type` (cosine ships as the SFT
-  default) plus `trainer.args.lr_scheduler_kwargs` for scheduler-specific params
-  — e.g. `cosine_with_min_lr` with `{min_lr_rate: 0.1}` to floor the LR, or
-  `cosine_with_restarts` with `{num_cycles: 2}`. Both are native `SFTConfig`
-  fields; set them as plain keys under `trainer.args`.
+  of steps. Every frontier run still uses these standard defaults.
+- LR schedule: set `trainer.args.lr_scheduler_type`. Cosine ships as the SFT
+  default. Set `trainer.args.lr_scheduler_kwargs` for the scheduler-specific
+  params. For example, use `cosine_with_min_lr` with `{min_lr_rate: 0.1}` to put
+  a floor under the LR. Or use `cosine_with_restarts` with `{num_cycles: 2}`.
+  Both are native `SFTConfig` fields. Set them as plain keys under
+  `trainer.args`.
 
 ## Multi-epoch SFT
 
-- 2–3 epochs can genuinely help on small datasets (SmolLM3's LiveCodeBench
-  nearly doubled from epoch 2 to 3). `num_train_epochs` is a legitimate
-  hypothesis lever, not a smell.
-- Caveat: multi-epoch training on a small set widens the train/eval gap, so
-  verify's `eval_train_gap` check may legitimately FAIL — that is the check
-  doing its job, not noise. Investigate (is the held-out eval metric still
-  improving?) before treating the FAIL as waivable; the eval metric, not train
-  loss, arbitrates.
+- 2–3 epochs can help on a small dataset. SmolLM3's LiveCodeBench score nearly
+  doubled from epoch 2 to epoch 3. `num_train_epochs` is a legitimate hypothesis
+  lever, not a sign of a mistake.
+- Caveat: multi-epoch training on a small set widens the train/eval gap. The
+  verify gate's `eval_train_gap` check can therefore FAIL for a legitimate
+  reason. That FAIL is the check at work, not noise. Investigate before you
+  treat the FAIL as waivable: does the held-out eval metric still improve? The
+  eval metric arbitrates, not the train loss.
 
 ## Masking
 
-- Mask user turns (assistant-only loss): small but real gains, largest on
-  instruction-following evals. In the TRL lane this is
-  `trainer.args.assistant_only_loss=true` for conversational datasets — verify
+- Mask the user turns (assistant-only loss). The gains are small but real, and
+  they are largest on the instruction-following evals. In the TRL lane, set
+  `trainer.args.assistant_only_loss=true` for a conversational dataset. Check
   the key against the installed TRL version first (preflight mistake #1/#2).
 
 ## Packing — decide per-path and record it
 
-- Packing gives 3–5× throughput but, for a fixed token budget, FEWER optimizer
-  updates — it silently raises the effective batch.
-- Effective batch > 32 measurably hurt small-dataset SFT (IFEval −10 points at
-  128). Packing pays off on LARGE datasets only; disable it for small curated
-  sets, and lower the LR when it is on.
-- A packing flip between paths is a hidden second variable — record the decision
-  in the preflight checklist every time.
+- Packing gives 3–5× throughput. For a fixed token budget, it also gives FEWER
+  optimizer updates. Packing raises the effective batch, and nothing in the run
+  reports the change.
+- An effective batch > 32 measurably degraded small-dataset SFT (IFEval −10
+  points at 128). Packing helps on a LARGE dataset only. Disable packing for a
+  small curated set. Lower the LR when packing is on.
+- A packing change between two paths is a hidden second variable. Record the
+  decision in the preflight checklist every time.
 
 ## Batch size
 
-- Batch ×k → LR ×√k (gradient-variance argument). A hypothesis that changes
-  effective batch without touching LR silently changes two variables.
-- LoRA paths cap effective batch < 32 regardless — see lora.md.
+- Batch ×k → LR ×√k (the gradient-variance argument). A hypothesis that changes
+  the effective batch but keeps the LR changes two variables at once. Nothing in
+  the run reports the second change.
+- A LoRA path caps the effective batch at < 32 in every case. See lora.md.
 
 ## DPO / preference optimization
 
-- LR: 10–20× below your SFT LR (Zephyr used 10×; SmolLM3 20× → 1e-6 at 3B).
-- beta ≥ 0.1 (0.1 won a 0.01–0.5 sweep; the trl_dpo default). More than one
-  epoch over preference data overfits — partition the data and iterate instead
-  of re-epoching.
-- Preference-set size barely matters (2k pairs already help; 100k+ degraded
-  reasoning mode) — spend budget on pair quality, not volume.
+- LR: set the DPO LR 10–20× below your SFT LR. Zephyr used 10×. SmolLM3 used
+  20×, which gave 1e-6 at 3B.
+- beta ≥ 0.1. In a 0.01–0.5 sweep, 0.1 was the best value, and it is the trl_dpo
+  default. More than one epoch over the preference data overfits. Partition the
+  data and iterate instead of a second epoch over the same data.
+- The preference-set size has little effect. 2k pairs already help, and 100k+
+  degraded the reasoning mode. Spend the budget on pair quality, not on volume.

@@ -194,7 +194,7 @@ def check_project(pyproject_path: Path | str, min_age_days: int = 7) -> list[str
         best = _latest_eligible(releases, cutoff)
         if best is not None and Version(best[0]) > floor:
             # The changelog URL rides along so the upgrade decision starts from release
-            # notes instead of a version number (see AGENTS.md "Upgrading dependencies").
+            # notes instead of a version number (see AGENTS.md "Upgrade dependencies").
             changelog = _changelog_url(payload)
             notes = f" — changelog: {changelog}" if changelog else ""
             lines.append(f"info: {requirement.name}: newer eligible version {best[0]} (declared floor {floor}){notes}")

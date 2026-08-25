@@ -1,16 +1,18 @@
 # Alerts reference
 
-Alert levels, the canonical messages fired by `intern.callbacks`, the polling
-commands, the wandb fallback, and how to write additional custom alerts.
+This file covers the alert levels and the canonical messages that
+`intern.callbacks` fires. It also covers the poll commands, the wandb fallback,
+and the rules for additional custom alerts.
 
 ## Levels and canonical messages (fired by intern.callbacks)
 
 `src/intern/callbacks.py` ships `TRLAlertCallback` (transformers/TRL) and
-`LightningAlertCallback` (Lightning). Both write every logged metric to
-`metrics.jsonl` and fire alerts through `fire_alert(backend, level, message)`,
-which routes to `trackio.alert` / `wandb.alert` / a loguru fallback depending on
-`cfg.tracking.backend`. Every alert is ALSO appended to `metrics.jsonl` as an
-event line, so the local record exists for all backends including `none`:
+`LightningAlertCallback` (Lightning). Both callbacks write every logged metric
+to `metrics.jsonl`. Both fire the alerts through
+`fire_alert(backend, level, message)`, which routes to `trackio.alert`,
+`wandb.alert`, or a loguru fallback. The value of `cfg.tracking.backend` selects
+the route. Both callbacks ALSO append every alert to `metrics.jsonl` as an event
+line. The local record therefore exists for every backend, `none` included:
 
 ```json
 {
@@ -21,7 +23,7 @@ event line, so the local record exists for all backends including `none`:
 }
 ```
 
-Thresholds come from
+The thresholds come from
 `AlertRules(nan_streak=5, divergence_factor=3.0, plateau_evals=5)`.
 
 | Condition                                                        | Level | Canonical message                                                                             | Built-in behavior                                           |
@@ -36,21 +38,23 @@ Every message follows the parseable format:
 <metric>=<value> at step <N> — <hypothesis>, try <action>
 ```
 
-Split on `—` to get `(observation, suggestion)`; split the observation on `=`
-and `at step` to get metric, value, step. Never fire or accept an alert message
-that a future call could not parse and act on.
+Split the message on `—` to get `(observation, suggestion)`. Split the
+observation on `=` and `at step` to get the metric, the value, and the step.
+Never fire an alert message that a future call cannot parse and act on. Never
+accept such a message.
 
-Level semantics when deciding what to do:
+Use the level semantics when you decide what to do:
 
-- **ERROR** — stop and change approach (NaN, divergence past recovery, OOM).
-- **WARN** — finish or kill the run, then tweak exactly one hyperparameter.
-- **INFO** — milestone or soft signal; note it, keep watching.
+- **ERROR** — stop the run. Change the approach (NaN, divergence past recovery,
+  OOM).
+- **WARN** — finish the run, or kill it. Then change exactly one hyperparameter.
+- **INFO** — a milestone or a soft signal. Note it. Continue to watch the run.
 
-## Trackio polling in detail
+## Poll trackio in detail
 
-Record the launch timestamp once, then poll incrementally. Poll every few
-minutes (2–5 min for short runs, 10–15 min for multi-hour runs) — never in a
-tight loop, and never by tailing `logs/train.log`.
+Record the launch timestamp once. Then poll incrementally. Poll every few
+minutes (2–5 min for short runs, 10–15 min for multi-hour runs). Never poll in a
+tight loop. Never tail `logs/train.log`.
 
 ```bash
 # Before launching the run:
@@ -64,10 +68,10 @@ uv run trackio list alerts --project my-little-ml-intern --run <run_name> --json
 uv run trackio list alerts --project my-little-ml-intern --level error --json
 ```
 
-Alert JSON items carry `run`, `title`, `text`, `level`, `step`, `timestamp` —
-the canonical message is in `text`.
+Alert JSON items carry `run`, `title`, `text`, `level`, `step`, and `timestamp`.
+The `text` field holds the canonical message.
 
-When an alert fires at step N, inspect the neighborhood before deciding:
+When an alert fires at step N, inspect the neighborhood before you decide:
 
 ```bash
 # All metrics in a ±10-step window around the alert:
@@ -86,17 +90,17 @@ uv run trackio get run --project my-little-ml-intern --run <run_name> --json   #
 uv run trackio get metric --project my-little-ml-intern --run <run_name> --metric eval_loss --json
 ```
 
-`get run` returns the run's `config` — read the previous run's config from here
-and mutate only the key the alert justifies changing.
+`get run` returns the run's `config`. Read the config of the previous run from
+here. Then mutate only the key that the alert justifies.
 
 ## wandb fallback
 
-`wandb.alert()` delivers to Slack/email via W&B notification settings; there is
-no CLI or public-API endpoint that returns alert history. Two options, in order
-of preference:
+`wandb.alert()` delivers to Slack or email through the W&B notification
+settings. No CLI or public-API endpoint returns the alert history. You have two
+options, in order of preference:
 
 1. **Backend-independent (preferred):** read the alert events from the local
-   `metrics.jsonl` — `intern.callbacks` writes them regardless of backend:
+   `metrics.jsonl`. `intern.callbacks` writes them for every backend:
 
    ```bash
    grep '"event": "alert"' experiments/NNN-<slug>/metrics.jsonl | tail -10
@@ -108,27 +112,28 @@ of preference:
    uv run python -c "import wandb; [print(r.name, r.id, r.state, r.summary.get('train/loss')) for r in wandb.Api().runs('<entity>/my-little-ml-intern')]"
    ```
 
-   Then drill into one run by id:
+   Then inspect one run by id:
 
    ```bash
    uv run python -c "import wandb; r = wandb.Api().run('<entity>/my-little-ml-intern/<run_id>'); print(r.state); print(dict(r.summary))"
    ```
 
-## Writing additional custom alerts
+## Write additional custom alerts
 
-The built-in callbacks cover NaN / divergence / plateau. Add task-specific
-alerts (reward collapse, KL spike, grad-norm blowup, accuracy target reached)
-directly in training code when the task calls for them.
+The built-in callbacks cover NaN, divergence, and plateau. Add a task-specific
+alert directly in the training code when the task needs one. Examples: reward
+collapse, KL spike, grad-norm blowup, accuracy target reached.
 
 Rules:
 
-- One metric, one threshold per `if`. Simple conditions stay easy to adjust
-  between runs.
-- The message MUST carry a numeric value and an actionable suggestion in the
-  canonical format — `<metric>=<value> at step <N> — <hypothesis>, try <action>`
-  — so a future call can parse it and act without rereading the code.
-- Prefer `intern.callbacks.fire_alert` over calling a backend directly: it
-  respects `cfg.tracking.backend` and keeps `metrics.jsonl` in sync.
+- Use one metric and one threshold per `if`. A simple condition stays easy to
+  adjust between runs.
+- The message MUST carry a numeric value and an actionable suggestion. Use the
+  canonical format —
+  `<metric>=<value> at step <N> — <hypothesis>, try <action>`. A future call
+  then parses the message and acts without a reread of the code.
+- Prefer `intern.callbacks.fire_alert` over a direct call to a backend. It
+  respects `cfg.tracking.backend`. It also keeps `metrics.jsonl` in sync.
 
 ```python
 from intern.callbacks import fire_alert
@@ -141,10 +146,10 @@ if grad_norm > 100.0:
     )
 ```
 
-Under a `Trainer`/`SFTTrainer` you don't own the loop — add a small
-`TrainerCallback` next to the built-in one and pass it via `callbacks=[...]`.
-Training metrics (loss, reward, kl) arrive in `on_log`; eval metrics ONLY in
-`on_evaluate`:
+Under a `Trainer` or an `SFTTrainer`, you do not own the loop. Add a small
+`TrainerCallback` next to the built-in one. Pass it through `callbacks=[...]`.
+The training metrics (loss, reward, kl) arrive in `on_log`. The eval metrics
+arrive ONLY in `on_evaluate`:
 
 ```python
 from transformers import TrainerCallback
@@ -161,7 +166,7 @@ class RewardCollapseAlert(TrainerCallback):
             )
 ```
 
-Calling a backend directly (custom loops outside the adapters only):
+Call a backend directly (in a custom loop outside the adapters only):
 
 ```python
 import trackio
@@ -179,12 +184,12 @@ wandb.alert(
 )
 ```
 
-If you add a custom alert, add its condition and canonical message to the
-experiment's plan.md notes so the next iteration knows what can fire.
+If you add a custom alert, record its condition and its canonical message in the
+experiment's plan.md notes. The next iteration then knows what can fire.
 
 ## Loss-spike triage (usual suspects)
 
-Before mutating a hyperparameter, match the spike's signature:
+Before you mutate a hyperparameter, match the signature of the spike:
 
 | Signature                                 | Usual suspect → next move                                                                                                                                     |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |

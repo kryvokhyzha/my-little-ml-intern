@@ -13,28 +13,31 @@ description:
 
 # verify-run
 
-Run `intern.py verify` on an experiment, judge the generations yourself, and
-route the outcome: pass → ledger + results.md; fail → postmortem + ledger, retry
-only if the budget gate allows.
+Run `intern.py verify` on an experiment. Judge the generations yourself. Then
+route the outcome. On a pass, update the ledger and write results.md. On a fail,
+write a postmortem and update the ledger. Retry only when the budget gate allows
+it.
 
 **A low loss number is never evidence the model works.**
 
-Blocking-gate rule: Never write results.md or report success unless
-`intern.py verify` exited 0. A failed gate means the run failed, regardless of
-loss.
+Blocking-gate rule: never write results.md unless `intern.py verify` exited 0.
+Never report success unless `intern.py verify` exited 0. A failed gate means the
+run failed, whatever the loss shows.
 
 ## Workflow
 
-1. **Locate the experiment (NNN).** Research before clarifying — never ask the
+1. **Locate the experiment (NNN).** Research before you clarify. Never ask the
    user what you can look up:
 
-   - Just trained in this session → use that experiment number.
-   - Otherwise: `ls experiments/`, prefer the dir whose `metrics.jsonl` is
-     newest or whose ledger has a `running`/`queued` row
+   - If you trained the experiment in this session, use that experiment number.
+   - Otherwise, run `ls experiments/`. Prefer the directory whose
+     `metrics.jsonl` is the newest, or whose ledger has a `running` or `queued`
+     row
      (`uv run python scripts/python/intern.py ledger --experiment NNN show`).
-   - Note the `path_id` of the row being verified — you need it in step 5.
-   - `999-` scratch experiments are exempt from blocking gates; verify anyway
-     when asked, but the results.md prohibition does not apply to them.
+   - Note the `path_id` of the row that you verify. You need it in step 5.
+   - The blocking gates do not apply to a `999-` scratch experiment. Verify such
+     an experiment when the user asks. The results.md prohibition does not apply
+     to it.
 
 2. **Run the gate.**
 
@@ -44,21 +47,24 @@ loss.
 
    Capture the exit code. Options:
 
-   - `--vocab-size N` — only when the effective tokenizer vocab differs from the
-     `vocab_size` meta in metrics.jsonl (resized embeddings, swapped tokenizer);
-     otherwise omit.
-   - `--checks a,b` — scope to specific checks by name (comma-separated) when
-     re-verifying a single fixed check; default is all applicable checks. A
-     scoped run only prints its report — it never writes or overwrites
-     verify.md; only a full (unscoped) run does.
+   - `--vocab-size N` — pass this option only when the effective tokenizer vocab
+     differs from the `vocab_size` meta in metrics.jsonl (resized embeddings,
+     swapped tokenizer). Otherwise omit it.
+   - `--checks a,b` — scope the gate to specific checks by name
+     (comma-separated). Use this option when you re-verify a single fixed check.
+     The default is all applicable checks. A scoped run only prints its report.
+     A scoped run never writes verify.md and never overwrites it. Only a full
+     (unscoped) run writes verify.md.
 
-   metrics.jsonl accumulates across paths/retries — verify scopes itself to the
-   last `run_start` event, so do NOT delete metrics.jsonl between retries.
+   metrics.jsonl accumulates across the paths and the retries. The gate scopes
+   itself to the last `run_start` event. So do NOT delete metrics.jsonl between
+   the retries.
 
 3. **Read the report** at `experiments/NNN-<slug>/verify.md`. For each `FAIL`
-   line, state in one line what the check measures and why this run failed it.
-   Default checks (thresholds and exact semantics: read
-   `docs/001-architecture.md` section "verify.py" when a name is unfamiliar):
+   line, state in one line what the check measures. Also state in one line why
+   this run failed it. For the thresholds and the exact semantics, read the
+   "verify.py" section of `docs/001-architecture.md` when a name is unfamiliar.
+   The default checks are:
 
    | check                      | one-line meaning                                                                   |
    | -------------------------- | ---------------------------------------------------------------------------------- |
@@ -70,18 +76,18 @@ loss.
    | `generation_sanity`        | samples.jsonl exists, not degenerate (mechanical proxies only)                     |
    | `reward_margin` / `kl_ref` | DPO-only: positive reward margin, finite KL                                        |
 
-4. **MANDATORY human-judgment step — even on mechanical PASS.** Read
-   `experiments/NNN-<slug>/logs/samples.jsonl` and judge whether the generations
-   are recognizable language for the training distribution (a TinyStories model
-   should produce story-like English; a code model, code-like text). Word salad
-   with valid vocabulary is a fail, not a partial pass. Append your judgment as
-   one line to verify.md:
+4. **MANDATORY human-judgment step — even on a mechanical PASS.** Read
+   `experiments/NNN-<slug>/logs/samples.jsonl`. Judge whether the generations
+   are recognizable language for the training distribution. A TinyStories model
+   must produce story-like English. A code model must produce code-like text.
+   Text that uses a valid vocabulary but carries no meaning is a fail, not a
+   partial pass. Append your judgment to verify.md as one line:
 
    ```
    JUDGMENT: generation_quality = PASS|FAIL | <one-line reasoning against the training distribution>
    ```
 
-   A FAIL judgment fails the run overall even when the exit code was 0.
+   A FAIL judgment fails the whole run, even when the exit code was 0.
 
 5. **Route the outcome.**
 
@@ -91,11 +97,11 @@ loss.
    uv run python scripts/python/intern.py ledger --experiment NNN upsert --path-id path-1 --status passed --verify pass
    ```
 
-   Only after the ledger update, write `experiments/NNN-<slug>/results.md`
-   (winner + comparison per the experiment convention). Then confirm the
-   scaffold is complete —
-   `uv run python scripts/python/intern.py check --experiment NNN` must exit 0
-   (catches a forgotten run.md before you report done).
+   Write `experiments/NNN-<slug>/results.md` only after you update the ledger.
+   That file holds the winner and the comparison, as the experiment convention
+   requires. Then confirm that the scaffold is complete.
+   `uv run python scripts/python/intern.py check --experiment NNN` must exit 0.
+   That command catches a forgotten run.md before you report done.
 
    **Fail** (exit 1, or judgment FAIL):
 
@@ -107,48 +113,51 @@ loss.
      uv run python scripts/python/intern.py ledger --experiment NNN upsert --path-id path-1 --status failed --verify fail --failure-cause "<one line>"
      ```
 
-   - Before ANY retry, check the budget gate and stop if it denies:
+   - Before ANY retry, run the budget gate. Stop when the gate denies the retry:
 
      ```
      uv run python scripts/python/intern.py budget --experiment NNN can-retry --path-id path-1
      ```
 
-     Nonzero exit = no retry; report the postmortem and stop. Never fire
-     `notify.sh train_done` for a run with no passing path. (notify.sh events
-     are a fixed list — see its usage header; unknown names send a degraded
-     generic card. Summaries: one `- ` bullet line per item.)
+     A nonzero exit means no retry. Report the postmortem and stop. Never fire
+     `notify.sh train_done` for a run that has no passing path. (The notify.sh
+     events are a fixed list — read its usage header. An unknown name sends a
+     degraded generic card. For a summary, write one `- ` bullet line per item.)
 
-6. **Interpret exit codes plainly.**
-   - `0` — all checks passed. Step 4 still applies before any success claim.
-   - `1` — at least one check FAILED. The run FAILED regardless of loss — say so
-     in those words. No "mostly passed", no "partial success".
-   - `2` — missing artifacts: training did not produce metrics.jsonl (or the
-     experiment dir is wrong). That is a pipeline bug, not "done" — fix the
-     training script / callback wiring, then rerun training; do not hand-craft
-     the missing files to appease the gate.
+6. **Interpret the exit codes plainly.**
+   - `0` — all the checks passed. Step 4 still applies before you claim success.
+   - `1` — at least one check FAILED. The run FAILED, whatever the loss shows.
+     Say so in those words. Do not write "mostly passed". Do not write "partial
+     success".
+   - `2` — the artifacts are missing. The training run did not produce
+     metrics.jsonl, or the experiment directory is wrong. That result is a
+     pipeline bug, not "done". Fix the training script or the callback wiring.
+     Then rerun the training. Never hand-craft the missing files to satisfy the
+     gate.
 
 ## Posture
 
-- **Headless:** never hang. Ambiguous call (which path_id, waive a red-flag
-  loss, retry or not) → take the conservative default, fire
-  `scripts/bash/notify.sh approval_required "<what you assumed>"`, proceed.
-  Interactive: AskUserQuestion, ≤ 4 bundled questions.
-- **Research-before-clarify:** experiment number, path_id, vocab size, and
-  planned tokens are all discoverable in `experiments/`, ledger.md, and
-  metrics.jsonl. Look before asking.
-- **Doom-loop guard:** 3 identical tool calls with no new information → write
-  `blocker.md` in the experiment dir, fire
-  `scripts/bash/notify.sh blocker "<summary>"`, stop.
-- **Context discipline:** read metrics.jsonl and logs with head/tail/grep, not
-  whole-file dumps.
+- **Headless:** never hang. Some calls are ambiguous: which path_id to verify,
+  whether to waive a red-flag loss, and whether to retry. For such a call, take
+  the conservative default. Then fire
+  `scripts/bash/notify.sh approval_required "<what you assumed>"`. Then proceed.
+  Interactive: use AskUserQuestion, and bundle ≤ 4 questions.
+- **Research-before-clarify:** you can discover the experiment number, the
+  path_id, the vocab size, and the planned tokens in `experiments/`, ledger.md,
+  and metrics.jsonl. Look before you ask.
+- **Doom-loop guard:** after 3 identical tool calls that return no new
+  information, write `blocker.md` in the experiment directory. Then fire
+  `scripts/bash/notify.sh blocker "<summary>"`. Then stop.
+- **Context discipline:** read metrics.jsonl and the logs with head, tail, or
+  grep. Do not dump a whole file.
 
 ## Done conditions
 
 - [ ] verify.md exists and contains an `OVERALL:` line.
-- [ ] `JUDGMENT:` line appended to verify.md after actually reading
+- [ ] You appended a `JUDGMENT:` line to verify.md after you read
       logs/samples.jsonl.
-- [ ] Ledger `verify` column updated to `pass` or `fail` for the verified path
-      (with `failure_cause` on fail).
-- [ ] On pass only: results.md written, and `intern.py check` exits 0.
-- [ ] On fail: postmortems/path-<id>.md exists; no retry launched without
-      `budget can-retry` exiting 0.
+- [ ] You updated the ledger `verify` column to `pass` or `fail` for the
+      verified path. On a fail, you also set `failure_cause`.
+- [ ] On a pass only: you wrote results.md, and `intern.py check` exits 0.
+- [ ] On a fail: postmortems/path-<id>.md exists. You launched no retry unless
+      `budget can-retry` exited 0.

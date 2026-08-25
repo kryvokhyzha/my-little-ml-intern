@@ -15,72 +15,76 @@ agent: general-purpose
 
 # literature-recipe-research
 
-Mine the literature for training recipes, attribute every claim to a published
-result, and return ONE deliverable: a ranked recipe table plus a short
-recommendation. This skill runs as a forked subagent — raw paper text, search
-dumps, and API responses stay in this context; only the deliverable goes back to
+Search the literature for training recipes. Attribute every claim to a published
+result. Return ONE deliverable: a ranked recipe table plus a short
+recommendation. This skill runs as a forked subagent. Raw paper text, search
+dumps, and API responses stay in this context. Only the deliverable goes back to
 the main agent.
 
 ## Rules
 
-- Research-before-clarify: never ask the user about anything you could look up.
-- Headless posture: never hang — write best-guess defaults, fire
-  `bash scripts/bash/notify.sh approval_required "<message>"`, proceed.
-- Doom-loop guard: 3 identical tool calls with no new information → write
-  `blocker.md` (in the experiment dir when one is named, else
-  `docs/999-blocker.md`), fire
-  `bash scripts/bash/notify.sh blocker "<message>"`, stop.
-- No vibes: every finding must be attributed as
+- Research-before-clarify: never ask the user about anything you can look up.
+- Headless posture: never stop to wait for an answer. Write best-guess defaults.
+  Fire `bash scripts/bash/notify.sh approval_required "<message>"`. Then
+  continue.
+- Doom-loop guard: after 3 identical tool calls that return no new information,
+  write `blocker.md`. Write it in the experiment dir when the request names an
+  experiment, else write `docs/999-blocker.md`. Fire
+  `bash scripts/bash/notify.sh blocker "<message>"`. Then stop.
+- No unattributed claims: attribute every finding as
   `Dataset X + method Y + hyperparams Z -> score W on benchmark V`. "They used
-  SFT" is not a finding; drop anything you cannot attribute.
-- Hard cap: stop researching at 1500 words of output — depth over breadth,
-  methodology sections over abstracts.
-- Context discipline: fetch targeted sections, never whole PDFs into the report;
-  the final report contains zero raw tool output.
+  SFT" is not a finding. Drop anything you cannot attribute.
+- Hard cap: stop the research at 1500 words of output. Prefer depth over
+  breadth. Prefer methodology sections over abstracts.
+- Context discipline: fetch targeted sections. Never put a whole PDF into the
+  report. The final report contains zero raw tool output.
 
 ## Workflow
 
-1. **Frame the task.** Restate in one paragraph for yourself: task/domain,
-   target model scale, benchmark(s) that define success, compute context. Probe
-   compute once with `bash scripts/bash/gpu_probe.sh` (`key=value` output:
-   `cuda=`, `mps=`, `gpu_count=`, `gpu_name=`, `vram_gb=`). When an experiment
-   is named, also read `experiments/NNN-<slug>/task.md` and `budget.md`
-   (`compute_cap_gpu_h`, `scale_ceiling_params`) — these define the feasibility
-   column.
+1. **Frame the task.** Restate the task for yourself in one paragraph: the
+   task/domain, the target model scale, the benchmark(s) that define success,
+   and the compute context. Probe the compute once with
+   `bash scripts/bash/gpu_probe.sh` (`key=value` output: `cuda=`, `mps=`,
+   `gpu_count=`, `gpu_name=`, `vram_gb=`). When the request names an experiment,
+   also read `experiments/NNN-<slug>/task.md` and `budget.md`
+   (`compute_cap_gpu_h`, `scale_ceiling_params`). These two files define the
+   feasibility column.
 
-2. **Find 2-3 anchor papers.** Prefer the alphaXiv MCP tools when available:
-   `discover_papers` to search, `get_paper_content` to read
-   (`answer_pdf_queries` for targeted questions). Fallback: WebSearch
+2. **Find 2-3 anchor papers.** Prefer the alphaXiv MCP tools when they are
+   available: `discover_papers` to search, `get_paper_content` to read
+   (`answer_pdf_queries` for targeted questions). Otherwise use WebSearch
    (`<task> training arxiv`, `site:arxiv.org <task>`) plus WebFetch on
    `https://arxiv.org/abs/<id>` and `https://huggingface.co/papers`. Pick
-   anchors that are landmark (highly cited) or recent SOTA — ideally one of
-   each.
+   anchors that are landmark (highly cited) or recent SOTA. Pick one of each
+   when you can.
 
-3. **Crawl citations DOWNSTREAM from the anchors** — who improved on this, not
-   what it cites. Via `discover_papers` with the anchor's key terms and a date
-   filter after its publication, or:
+3. **Crawl citations DOWNSTREAM from the anchors.** Find the papers that
+   improved on an anchor, not the papers that the anchor cites. Use
+   `discover_papers` with the anchor's key terms and a date filter after its
+   publication, or run:
 
    ```
    curl -s "https://api.semanticscholar.org/graph/v1/paper/arXiv:<id>/citations?fields=title,year,citationCount,externalIds&limit=50"
    ```
 
-   Prioritize recent + highly cited. If a downstream paper reports clearly
-   better results, crawl its citations too (one extra hop max — hard cap).
+   Prioritize the recent and highly cited papers. When a downstream paper
+   reports clearly better results, crawl its citations too. Take one extra hop
+   at most. This cap is hard.
 
-4. **Read methodology sections specifically** (typically sections 3-5: method,
-   experiments, results — never just the abstract). Use `get_paper_content`,
-   else WebFetch `https://arxiv.org/pdf/<id>` or
-   `https://ar5iv.labs.arxiv.org/html/<id>`. Extract per paper: exact dataset(s)
-   (name, size, filtering/preprocessing), training config (optimizer, lr,
-   schedule, epochs, batch size, seq length), and the exact scores those choices
-   produced.
+4. **Read the methodology sections** — typically sections 3-5: method,
+   experiments, and results. Never read only the abstract. Use
+   `get_paper_content`, else WebFetch `https://arxiv.org/pdf/<id>` or
+   `https://ar5iv.labs.arxiv.org/html/<id>`. Extract the exact dataset(s) per
+   paper: name, size, filtering/preprocessing. Extract the training config:
+   optimizer, lr, schedule, epochs, batch size, seq length. Extract the exact
+   scores that those choices produced.
 
-5. **Attribute.** Convert notes to findings in the required
+5. **Attribute.** Convert your notes to findings in the required
    `dataset + method + hyperparams -> score on benchmark` form. Discard the
    rest.
 
-6. **Verify assets exist before recommending them.** Use the `hf` CLI if
-   installed, else the Hub API:
+6. **Verify that an asset exists before you recommend it.** Use the `hf` CLI
+   when it is installed. Otherwise use the Hub API:
 
    ```
    curl -s "https://huggingface.co/api/datasets/<org>/<name>" | head -c 300
@@ -88,9 +92,9 @@ the main agent.
    curl -s "https://datasets-server.huggingface.co/rows?dataset=<org>%2F<name>&config=default&split=train&offset=0&length=3"
    ```
 
-   Check the column format matches the method: SFT needs `messages`, `text`, or
-   `prompt`/`completion`; DPO needs `prompt`/`chosen`/`rejected`; GRPO needs
-   `prompt`. A dataset or base model you did not verify does not go in the
+   Check that the column format matches the method. SFT needs `messages`,
+   `text`, or `prompt`/`completion`. DPO needs `prompt`/`chosen`/`rejected`.
+   GRPO needs `prompt`. Never put an unverified dataset or base model in the
    table.
 
 7. **Find at least one working reference implementation per top recipe.**
@@ -100,53 +104,58 @@ the main agent.
    gh search code "<trainer or loss class>" --language python --limit 5
    ```
 
-   `gh` needs auth (`GH_TOKEN` takes precedence over `GITHUB_TOKEN`), and
-   unauthenticated `gh search` refuses to run. `.env` is NOT auto-loaded into
-   the agent shell — check `gh auth status` first, and if needed export the
-   token from `.env` for the session. On missing auth, fall back to WebSearch
-   for repos instead of failing the step.
+   `gh` needs auth (`GH_TOKEN` takes precedence over `GITHUB_TOKEN`).
+   Unauthenticated `gh search` refuses to run. The agent shell does NOT
+   auto-load `.env`. Check `gh auth status` first. Export the token from `.env`
+   for the session when you must. When `gh` has no auth, use WebSearch for repos
+   and continue.
 
-   Fallback: WebSearch `github <method> training script`. Fetch the linked file
-   to confirm it exists before citing it.
+   Otherwise use WebSearch `github <method> training script`. Fetch the linked
+   file. Confirm that it exists before you cite it.
 
-8. **Write the deliverable** (output contract below) and save it:
+8. **Write the deliverable** (see the output contract below). Save it:
 
-   - `experiments/NNN-<slug>/research.md` when an experiment is named (`NNN` or
-     full `NNN-slug` both identify it);
+   - `experiments/NNN-<slug>/research.md` when the request names an experiment
+     (`NNN` or the full `NNN-slug` both identify it);
    - otherwise a numbered `docs/` entry per `.claude/skills/new-doc/SKILL.md`
      (next free `NNN-` prefix, kebab-case slug, e.g.
      `docs/003-<task>-recipe-research.md`).
 
-   Return the same content as your final report — nothing else.
+   Return the same content as your final report. Return nothing else.
 
 ## Output contract
 
-500-1500 words total. Two parts, nothing else — no preamble, no crawl log.
+Write 500-1500 words in total. Write two parts and nothing else. Do not add a
+preamble. Do not add a crawl log.
 
-Ranked recipe table (best first), columns exactly:
+Write the ranked recipe table with the best recipe first. Use exactly these
+columns:
 
 ```
 | rank | method | dataset | key hyperparams | published result | source | reference impl | feasibility on our compute |
 ```
 
-- `published result` — exact score + benchmark ("71.2 on MMLU"), not "strong".
-- `source` — arXiv id or URL, with year.
-- `reference impl` — repo/file URL you fetched and confirmed.
-- `feasibility on our compute` — fits / tight / no, judged against
-  `gpu_probe.sh` output and budget caps, one phrase of justification.
+- `published result` — give the exact score and the benchmark ("71.2 on MMLU"),
+  never "strong".
+- `source` — give the arXiv id or the URL, with the year.
+- `reference impl` — give the repo/file URL that you fetched and confirmed.
+- `feasibility on our compute` — fits / tight / no. Judge it against the
+  `gpu_probe.sh` output and the budget caps. Add one phrase of justification.
 
-Then a 3-5 sentence recommendation: which recipe to implement first and why,
-which verified dataset to use (exact Hub path), and any gaps — preprocessing
-needed, method adaptation, license concerns.
+Then write a 3-5 sentence recommendation. Name the recipe to implement first and
+give the reason. Name the verified dataset to use, with the exact Hub path. Name
+any gaps: preprocessing needed, method adaptation, license concerns.
 
 ## Done conditions
 
-- [ ] 2-3 anchor papers identified; at least one downstream citation crawl done
-- [ ] Every table row attributed: dataset + method + hyperparams -> score on
-      benchmark, with source
-- [ ] Every recommended dataset/model verified on the Hub (API or `hf` CLI
-      output seen)
-- [ ] At least one confirmed reference implementation URL per top recipe
-- [ ] Output is 500-1500 words: ranked table + 3-5 sentence recommendation,
-      nothing else
-- [ ] Saved to `experiments/NNN-<slug>/research.md` or a numbered `docs/` file
+- [ ] You identified 2-3 anchor papers. You did at least one downstream citation
+      crawl
+- [ ] You attributed every table row: dataset + method + hyperparams -> score on
+      benchmark, with the source
+- [ ] You verified every recommended dataset/model on the Hub (you saw the API
+      or `hf` CLI output)
+- [ ] You confirmed at least one reference implementation URL per top recipe
+- [ ] The output is 500-1500 words: the ranked table plus a 3-5 sentence
+      recommendation, nothing else
+- [ ] You saved it to `experiments/NNN-<slug>/research.md` or to a numbered
+      `docs/` file

@@ -1,10 +1,11 @@
-# Hardware sizing
+# Size the hardware
 
-Size the GPU from param count × method BEFORE picking a lane tier. Rules of
-thumb (AdamW): full fine-tune ≈ 16–18 bytes/param + activations; LoRA ≈ 2
-bytes/param frozen base (bf16) + small adapter/optimizer overhead; QLoRA ≈ 0.5–1
-byte/param base. Activations scale with batch × sequence length — the knobs the
-OOM ladder turns.
+Size the GPU from the param count × the method BEFORE you pick a lane tier.
+These are the AdamW estimates. A full fine-tune needs ≈ 16–18 bytes/param +
+activations. LoRA needs ≈ 2 bytes/param for the frozen base (bf16), plus a small
+adapter/optimizer overhead. QLoRA needs ≈ 0.5–1 byte/param for the base. The
+activations scale with batch × sequence length. The OOM ladder turns those
+knobs.
 
 | Model size | Method       | Minimum viable              | Comfortable       | hf_jobs flavor guide      |
 | ---------- | ------------ | --------------------------- | ----------------- | ------------------------- |
@@ -19,59 +20,66 @@ OOM ladder turns.
 
 Notes:
 
-- `a10g-small` and `a10g-large` have the SAME 24 GB GPU — the difference is
-  CPU/RAM only. Don't pay for `large` expecting more VRAM.
-- This repo's default `scale_ceiling_params` is 200M — anything bigger must
-  already be justified in budget.md before sizing hardware for it.
-- Keep effective batch (`per_device × grad_accum × gpus`) constant across paths;
-  ~128 is a sane SFT default (LoRA paths cap it at < 32 — see lora.md).
-- The QLoRA rows are real lanes: bitsandbytes ships in the `gpu` dependency
-  group (`uv sync --group gpu` on the CUDA box) — recipe and the `_4bit` model
-  variant (nested `BitsAndBytesConfig` node) live in lora.md's QLoRA subsection.
+- `a10g-small` and `a10g-large` have the SAME 24 GB GPU. Only the CPU and the
+  RAM differ. Do not pay for `large` in the expectation of more VRAM.
+- This repo's default `scale_ceiling_params` is 200M. budget.md must already
+  justify any bigger model before you size the hardware for it.
+- Keep the effective batch (`per_device × grad_accum × gpus`) constant across
+  the paths. ~128 is a defensible SFT default. LoRA paths cap it at < 32 (see
+  lora.md).
+- The QLoRA rows are real lanes. bitsandbytes ships in the `gpu` dependency
+  group (`uv sync --group gpu` on the CUDA box). lora.md's QLoRA subsection
+  holds the recipe and the `_4bit` model variant (nested `BitsAndBytesConfig`
+  node).
 
 ## Flash attention
 
-- **Never `pip install flash-attn`** (source compile) — it fails on most
-  CUDA/torch combos and wastes an hour before failing. Use prebuilt Hub kernels
-  via the `kernels` library:
+- **Never run `pip install flash-attn`** (source compile). It fails on most
+  CUDA/torch combinations. It wastes an hour before it fails. Use the prebuilt
+  Hub kernels through the `kernels` library:
   `attn_implementation="kernels-community/flash-attn2"` (or `vllm-flash-attn3`)
   in `from_pretrained`.
-- **Never on pre-Ampere GPUs** — T4, V100, GTX 10/16-series cannot run
-  flash-attention 2 at all. Ampere or newer only (A10G, A100, RTX 30/40,
-  L4/L40S, H100). On pre-Ampere, use the default `sdpa` and pick a non-flash
-  configuration rather than "trying anyway".
-- When in doubt, `sdpa` (the transformers default) is correct everywhere and
-  only modestly slower. It is never worth failing a run over an attention
-  kernel.
+- **Never use flash attention on a pre-Ampere GPU.** T4, V100, and the GTX
+  10/16-series cannot run flash-attention 2 at all. Use Ampere or newer only
+  (A10G, A100, RTX 30/40, L4/L40S, H100). On a pre-Ampere GPU, use the default
+  `sdpa`. Pick a non-flash configuration. Do not try flash attention anyway.
+- If you are not sure, use `sdpa` (the transformers default). It is correct
+  everywhere, and only modestly slower. Never let an attention kernel fail a
+  run.
 
 ## bf16 vs fp16 vs fp32
 
-- **bf16** — preferred mixed precision. Ampere+ only (`gpu_probe.sh` →
-  `gpu_name` tells you). fp32 dynamic range, no loss scaling, far fewer NaN
-  surprises. The trainer groups ship `bf16: false`; set `trainer.args.bf16=true`
-  only after the probe confirms Ampere+.
-- **fp16** — only option for mixed precision on T4/V100. Needs loss scaling (the
-  trainers handle it) but is NaN-prone at high LR; if a fp16 run NaNs, suspect
-  precision before data. Never enable bf16 on these cards — it silently falls
-  back or crashes depending on the stack.
-- **fp32** — always safe, ~2× memory. Correct default for smoke runs on CPU/MPS
-  and for debugging NaN streaks (rerun the failing step in fp32 to separate
-  precision bugs from data bugs).
+- **bf16** — the preferred mixed precision. It runs on Ampere+ only
+  (`gpu_probe.sh` → `gpu_name` tells you). It has the fp32 dynamic range, it
+  needs no loss scaling, and it gives far fewer NaN surprises. The trainer
+  groups ship `bf16: false`. Set `trainer.args.bf16=true` only after the probe
+  confirms Ampere+.
+- **fp16** — the only mixed-precision option on T4/V100. It needs loss scaling,
+  and the trainers handle that. It is NaN-prone at a high LR. If a fp16 run
+  produces a NaN, suspect the precision before the data. Never enable bf16 on
+  these cards. bf16 silently falls back, or it crashes. The result depends on
+  the stack.
+- **fp32** — always safe, ~2× memory. It is the correct default for a smoke run
+  on CPU/MPS. It is also the correct default when you debug a NaN streak. Rerun
+  the step that failed in fp32, to separate a precision bug from a data bug.
 
 ## MPS (Apple Silicon) caveats
 
-- **Smoke and tiny runs only** — never budget real training GPU-hours on MPS.
-- **No bf16 autocast guarantees** — keep smoke runs fp32 (`bf16: false`, no
-  fp16). Precision-sensitive ops on MPS have known divergences; a smoke pass in
-  fp32 on MPS + a re-smoke on the CUDA target is the reliable combo.
-- Some ops still miss MPS kernels; if a smoke crashes with an unimplemented-op
-  error, set `PYTORCH_ENABLE_MPS_FALLBACK=1` and accept the CPU fallback — it's
-  a smoke run, correctness beats speed.
-- `gpu_probe.sh` reports `mps=true` with `cuda=false` — treat that as "local is
-  a smoke lane" and pick a remote lane for the long run.
-- **GPTNeoX/pythia diverges on MPS even in fp32** (observed in experiment 001:
-  grad norms in the thousands, loss climbing at lr 5e-5, while the identical CPU
-  run trains cleanly). For GPTNeoX-family models on Apple Silicon set
-  `+trainer.args.use_cpu=true`; tiny models train in seconds on CPU anyway.
-- bitsandbytes quantization (QLoRA) is CUDA-only — QLoRA paths cannot even smoke
-  on MPS; smoke them on the CUDA target directly.
+- **Smoke runs and tiny runs only.** Never budget real training GPU-hours on
+  MPS.
+- **MPS gives no bf16 autocast guarantees.** Keep the smoke runs in fp32
+  (`bf16: false`, no fp16). Precision-sensitive ops on MPS have known
+  divergences. Run the smoke test in fp32 on MPS. Then run the smoke test again
+  on the CUDA target. This pair is the reliable sequence.
+- Some ops still miss the MPS kernels. If a smoke run crashes with an
+  unimplemented-op error, set `PYTORCH_ENABLE_MPS_FALLBACK=1`. Accept the CPU
+  fallback. This is a smoke run, and correctness matters more than speed.
+- `gpu_probe.sh` reports `mps=true` with `cuda=false`. Treat the local machine
+  as a smoke lane. Pick a remote lane for the long run.
+- **GPTNeoX/pythia diverges on MPS even in fp32.** Experiment 001 recorded it:
+  the grad norms reached the thousands, and the loss climbed at lr 5e-5. The
+  identical CPU run trained cleanly. For a GPTNeoX-family model on Apple
+  Silicon, set `+trainer.args.use_cpu=true`. A tiny model trains in seconds on
+  CPU anyway.
+- bitsandbytes quantization (QLoRA) is CUDA-only. A QLoRA path cannot run its
+  smoke test on MPS. Run that smoke test on the CUDA target directly.

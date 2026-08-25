@@ -13,7 +13,7 @@ description:
 
 # new-experiment
 
-One experiment number = three artifacts, created together:
+One experiment number = three artifacts. Create all three together:
 
 ```
 scripts/python/NNN-<slug>.py      # hydra entrypoint (new-script scaffold + src import)
@@ -21,53 +21,56 @@ configs/NNN-<slug>.yaml           # composes main + model/data/trainer/tracking/
 experiments/NNN-<slug>/           # task.md, plan.md, budget.md, ledger.md, run.md
 ```
 
-The skeletons below are the contract. Read `docs/001-architecture.md`
-("Experiment convention", "Config groups", "budget.md format", "ledger.md
-format") when anything is ambiguous — that doc wins.
+The skeletons below are the contract. Read `docs/001-architecture.md` when
+anything is ambiguous — the sections "Experiment convention", "Config groups",
+"budget.md format", and "ledger.md format". That doc wins.
 
 ## Posture
 
-- Research-before-clarify: never ask the user about anything you could look up
-  (existing configs, prior experiments, dataset names already in the repo).
-- Interactive: unresolved unknowns → one AskUserQuestion, ≤ 4 bundled questions.
-  Headless: never hang — write best-guess defaults, record them under "Unknowns"
-  in task.md, fire
-  `scripts/bash/notify.sh approval_required "<what you assumed>"`, proceed.
-- Doom-loop guard: 3 identical tool calls with no new information → write
-  `experiments/NNN-<slug>/blocker.md`, fire
-  `scripts/bash/notify.sh blocker "<summary>"`, stop.
+- Research before you ask. Never ask the user about anything you can look up.
+  Look up the existing configs, the prior experiments, and the dataset names
+  already in the repo.
+- Interactive mode: ask one AskUserQuestion that bundles ≤ 4 questions for the
+  unresolved unknowns. Headless mode: never wait for a reply. Write best-guess
+  defaults. Record them under "Unknowns" in task.md. Fire
+  `scripts/bash/notify.sh approval_required "<what you assumed>"`. Then proceed.
+- Doom-loop guard: after 3 identical tool calls that return no new information,
+  write `experiments/NNN-<slug>/blocker.md`. Fire
+  `scripts/bash/notify.sh blocker "<summary>"`. Then stop.
 
 ## Steps
 
 ### 1. Resolve the slug
 
-Use `$ARGUMENTS` or the task description; slugify to kebab-case (lowercase,
-non-alnum → `-`, collapse repeats, trim).
+Take the slug from `$ARGUMENTS` or from the task description. Slugify it to
+kebab-case: lowercase it, replace each non-alnum character with `-`, collapse
+repeats, and trim.
 
 ### 2. Pick the number
 
-Next free 3-digit prefix across **all three locations**:
+Take the next free 3-digit prefix across **all three locations**:
 
 ```bash
 ls scripts/python configs experiments 2>/dev/null \
   | grep -E '^[0-9]{3}-' | grep -v '^999-' | sort | tail -1
 ```
 
-Increment the highest by 1, zero-pad to 3 digits; start at `001` if nothing
-matches. If the user named an explicit NNN ("set up experiment 007"), use it
-only when free in all three locations; otherwise take the next free prefix and
-say so.
+Increment the highest number by 1. Zero-pad the result to 3 digits. Start at
+`001` when nothing matches. The user can name an explicit NNN, for example "set
+up experiment 007". Use that number only when it is free in all three locations.
+Otherwise take the next free prefix and tell the user.
 
-Scratch: when the user signals draft/scratch/WIP/temporary, use the `999-`
-prefix instead — gitignored, exempt from blocking gates, multiple `999-` files
-may coexist (don't increment). `.gitignore` already covers
-`scripts/python/999-*.py`, `configs/999-*.yaml`, and `experiments/999-*/`.
-Promotion = rename `999-<slug>` to the next free `NNN` in all three locations at
-once — from then on all gates apply.
+Scratch: when the user asks for a draft, scratch, WIP, or temporary run, use the
+`999-` prefix instead. Git ignores these files, and the gates do not block them.
+Several `999-` files can coexist, so do not increment the number. `.gitignore`
+already covers `scripts/python/999-*.py`, `configs/999-*.yaml`, and
+`experiments/999-*/`. To promote a scratch experiment, rename `999-<slug>` to
+the next free `NNN` in all three locations at once. All gates apply after the
+rename.
 
 ### 3. Create the config
 
-`configs/NNN-<slug>.yaml` — compose the groups exactly like this:
+Create `configs/NNN-<slug>.yaml`. Compose the groups exactly like this:
 
 ```yaml
 # @package _global_
@@ -85,26 +88,31 @@ defaults:
 experiment_name: NNN-<slug>
 ```
 
-Swap a group pick only when the task calls for it: `model` ∈
+Swap a group pick only when the task needs it. The picks are `model` ∈
 `smollm2_135m|smollm2_135m_it|smollm2_360m_it|gemma_4_e2b_it|gemma_4_e2b_it_4bit`,
 `data` ∈ `tiny_synthetic|pi_mono_sft|smoltalk_everyday|self_distill_local`,
 `trainer` ∈
 `trl_sft|trl_sft_lora|trl_sft_qlora|trl_dpo|trl_kto|trl_grpo|trl_gkd|lightning|axolotl`,
-`tracking` ∈ `trackio|wandb|none`, `compute` ∈ `local|ssh|modal|vast|hf_jobs`
-(see `configs/*/`). **Pick the budget by task** — caps must fit the work (a
-smoke needs minutes; a GRPO run needs hours); the catalog is in step 5. Model
-identity lives in the `model` group and dataset identity in the `data` group —
-never invent values by typing raw repo ids or dataset slugs into trainer keys;
-override the `model:`/`data:` pick instead. A new model or dataset is a one-file
-addition (`configs/model/<name>.yaml` / `configs/data/<name>.yaml`) following
-the `_target_` pattern in `docs/001-architecture.md` ("Config groups"). Set
-other concrete overrides under `_self_` only when actually known. Tracking
-backend is never hardcoded in code; adapters read `cfg.tracking.backend`.
+`tracking` ∈ `trackio|wandb|none`, and `compute` ∈
+`local|ssh|modal|vast|hf_jobs` (see `configs/*/`).
+
+**Pick the budget by task** — the caps must fit the work. A smoke run needs
+minutes, and a GRPO run needs hours. Step 5 holds the catalog.
+
+The `model` group holds the model identity, and the `data` group holds the
+dataset identity. Never type a raw repo id or a dataset slug into a trainer key.
+Override the `model:` or `data:` pick instead. A new model or a new dataset is a
+one-file addition: `configs/model/<name>.yaml` / `configs/data/<name>.yaml`.
+Follow the `_target_` pattern in `docs/001-architecture.md` ("Config groups").
+Set other concrete overrides under `_self_` only when you know the values.
+
+Never hardcode the tracking backend in code. The adapters read
+`cfg.tracking.backend`.
 
 ### 4. Create the script
 
-`scripts/python/NNN-<slug>.py` — the new-script scaffold **plus** the `sys.path`
-src insert right after `rootutils.setup_root(...)`, dispatching on
+Create `scripts/python/NNN-<slug>.py` from the new-script scaffold. Add the
+`sys.path` src insert right after `rootutils.setup_root(...)`. Dispatch on
 `cfg.trainer.kind`:
 
 ```python
@@ -141,23 +149,23 @@ if __name__ == "__main__":
     main()
 ```
 
-Rules (from the new-script skill — read it when unsure):
+Rules (from the new-script skill — read it when you are unsure):
 
-- Dispatch ONLY the lane(s) the config composes (shipped scripts do exactly
-  this) — the analogous branch for other lanes is
+- Dispatch ONLY the lanes that the config composes. The shipped scripts do
+  exactly this. For another lane, the branch calls
   `training.trl.run_dpo|run_grpo|run_gkd|run_kto`,
   `training.lightning_adapter.run`, or `training.axolotl_adapter.render`.
-- Keep the adapter imports lazy inside the branches so `--cfg job` and config
-  composition never require training dependencies.
-- Library imports stay bare (`from training...`, `from intern...`), never
-  `from src....`.
+- Keep the adapter imports lazy inside the branches. `--cfg job` and the config
+  composition then never need the training dependencies.
+- Write the library imports bare (`from training...`, `from intern...`). Never
+  write `from src....`.
 - Never wrap a `@hydra.main` function in `fire.Fire(...)` — Hydra owns
   `sys.argv`.
 
 ### 5. Create the experiment directory
 
-`experiments/NNN-<slug>/` with exactly these five files. Never create
-`results.md` or `verify.md` — those are gate outputs written later.
+Create `experiments/NNN-<slug>/` with exactly these five files. Never create
+`results.md` or `verify.md`. The gates write those two files later.
 
 `task.md`:
 
@@ -177,8 +185,8 @@ Rules (from the new-script skill — read it when unsure):
 interactive # or: headless
 ```
 
-`plan.md` — every hypothesis carries the full contract; no production file may
-be edited before the change is a named hypothesis:
+`plan.md` — every hypothesis carries the full contract. Do not edit a production
+file before the change is a named hypothesis:
 
 ```text
 # Plan — NNN-<slug>
@@ -200,17 +208,17 @@ One variable per path — prefer exactly one Hydra override per path.
 | path-1  | H1         | <e.g. trainer.args.learning_rate=1e-4> |
 ```
 
-`budget.md` — **do not hand-write the caps.** Seed it from the same profile the
-config composes so the two never drift:
+`budget.md` — **do not hand-write the caps.** Seed the file from the same
+profile that the config composes, so the two never drift:
 
 ```bash
 uv run python scripts/python/intern.py budget --experiment NNN init --profile <name>
 ```
 
-`init` writes the caps from `configs/budget/<name>.yaml` with all spend counters
-at zero, and refuses to clobber a budget.md that already has recorded spend
-(pass `--force` to re-seed intentionally). Budget is task-keyed — choose the
-profile whose caps fit the work:
+`init` writes the caps from `configs/budget/<name>.yaml` and sets every spend
+counter to zero. `init` refuses to overwrite a budget.md that already records
+spend. Pass `--force` to re-seed the file on purpose. The budget is task-keyed.
+Choose the profile whose caps fit the work:
 
 | profile        | paths × retries | GPU-h | param ceiling | use for                                   |
 | -------------- | --------------- | ----: | ------------: | ----------------------------------------- |
@@ -223,22 +231,22 @@ profile whose caps fit the work:
 | `pretrain`     | 1 × 1           |  24.0 |            2B | from-scratch pretraining                  |
 | `autoresearch` | 10 × 1          |   8.0 |          200M | autoresearch-loop orchestrator            |
 
-Need caps between profiles? Add a new `configs/budget/<name>.yaml` (five cap
-keys, copy an existing one) rather than hand-editing budget.md — the profile
-stays the single source of truth.
+When you need caps between two profiles, add a new `configs/budget/<name>.yaml`
+with five cap keys. Copy an existing one. Do not hand-edit budget.md. The
+profile stays the single source of truth.
 
-`ledger.md` — empty table, header columns exactly:
+`ledger.md` — an empty table with these header columns exactly:
 
 ```text
 | path_id | approach | status | final_train_loss | final_eval_loss | verify | failure_cause | retry_of | gpu_min | run_url |
 | ------- | -------- | ------ | ---------------- | --------------- | ------ | ------------- | -------- | ------- | ------- |
 ```
 
-`run.md` — skeleton only; **train-llm** fills the exact on-compute commands as
-it runs them (full format: `docs/001-architecture.md` "run.md format"). Scaffold
-`# Run — NNN-<slug>` then empty `## Lane`, `## Setup`, `## Train`,
-`## Benchmark` sections (add `## Provision` / `## Teardown` only for remote
-lanes).
+`run.md` — write the skeleton only. The **train-llm** skill fills in the exact
+on-compute commands as it runs them. `docs/001-architecture.md` ("run.md
+format") holds the full format. Scaffold `# Run — NNN-<slug>` and then the empty
+sections `## Lane`, `## Setup`, `## Train`, and `## Benchmark`. Add
+`## Provision` and `## Teardown` only for the remote lanes.
 
 ### 6. Verify the scaffold
 
@@ -248,48 +256,52 @@ uv run python scripts/python/intern.py budget --experiment NNN status
 uv run python scripts/python/intern.py check --experiment NNN
 ```
 
-All must exit 0 (`--cfg job` prints the composed config without running
-training; `check` refuses if any required file — task/plan/budget/ledger/run.md
-— is missing). Exit 1 = gate denied, 2 = usage/missing artifacts — fix the
-scaffold before reporting; never report success on a nonzero exit.
+All three commands must exit 0. `--cfg job` prints the composed config and does
+not run the training. `check` refuses when any required file is missing:
+task.md, plan.md, budget.md, ledger.md, or run.md.
+
+Exit 1 means the gate denied the scaffold. Exit 2 means a usage error or a
+missing artifact. Fix the scaffold before you report. Never report success on a
+nonzero exit.
 
 ### 7. Report back
 
-Link all three artifacts and show the run commands:
+Link all three artifacts. Show the run commands:
 
 ```
 uv run python scripts/python/NNN-<slug>.py smoke_test=true   # mandatory smoke gate before any long run
 uv run python scripts/python/NNN-<slug>.py
 ```
 
-Planning, launching, and monitoring paths belong to the train-llm skill — hand
-off there.
+The train-llm skill plans, launches, and monitors the paths. Hand off to that
+skill.
 
 ## Gates
 
-Never write results.md or report success unless `intern.py verify` exited 0. A
-failed gate means the run failed, regardless of loss.
+Never write results.md unless `intern.py verify` exited 0. Never report success
+unless `intern.py verify` exited 0. A failed gate means the run failed,
+regardless of the loss.
 
-- Before launching any path:
-  `uv run python scripts/python/intern.py budget --experiment NNN can-launch`
-  (exit 0 = allowed, 1 = denied — stop, do not launch).
-- This skill only scaffolds; it never fires `notify.sh train_done`.
-- `999-` scratch experiments are exempt from gates until promoted.
+- Before you launch any path, run
+  `uv run python scripts/python/intern.py budget --experiment NNN can-launch`.
+  Exit 0 allows the launch. Exit 1 denies it — stop and do not launch.
+- This skill only scaffolds. It never fires `notify.sh train_done`.
+- The gates skip a `999-` scratch experiment until you promote it.
 
 ## Done conditions
 
 - [ ] `scripts/python/NNN-<slug>.py` exists — new-script scaffold + `sys.path`
       src insert + `cfg.trainer.kind` dispatch.
 - [ ] `configs/NNN-<slug>.yaml` exists and composes the six groups + `_self_`
-      with `experiment_name` set;
+      with `experiment_name` set.
       `uv run python scripts/python/NNN-<slug>.py     --cfg job` exits 0.
 - [ ] `experiments/NNN-<slug>/` contains task.md, plan.md, budget.md, ledger.md,
       run.md (skeleton) — and no results.md or verify.md.
       `intern.py check --experiment NNN` exits 0 (the scaffold gate).
 - [ ] Every hypothesis in plan.md has mechanism / expected_delta /
-      falsification; each path is one Hydra override.
+      falsification. Each path is one Hydra override.
 - [ ] budget.md parses:
       `uv run python scripts/python/intern.py budget --experiment NNN status`
       exits 0.
-- [ ] The same NNN prefix is used in all three locations and collides with
+- [ ] The same NNN prefix appears in all three locations and collides with
       nothing.

@@ -1,17 +1,18 @@
 # Gemma family: training and tuning notes
 
-Read this when an experiment composes a `configs/model/gemma_*` group or plans
-to. Provenance tags: **[001]** = verified by experiment 001-pi-mono-sft through
-this repo's gates; **[checked]** = verified directly (template/tokenizer
-inspection, 2026-07-18); **[skills]** = imported from the community
+Read this file when an experiment composes a `configs/model/gemma_*` group. Read
+it also when you plan such an experiment. Provenance tags: **[001]** = verified
+by experiment 001-pi-mono-sft through this repo's gates. **[checked]** =
+verified directly (template/tokenizer inspection, 2026-07-18). **[skills]** =
+imported from the community
 [google-gemma/gemma-skills](https://github.com/google-gemma/gemma-skills) pack
-(its README disclaims official Google support). Where they disagree, trust
-[001]/[checked] over [skills].
+(its README disclaims official Google support). Where the sources disagree,
+trust [001]/[checked] over [skills].
 
-## Picking the model (before budget.md is written)
+## Pick the model (before budget.md is written)
 
 Default to the Gemma 4 generation [skills]. All Gemma 4 models have thinking
-mode; context 256K (128K for the E-series):
+mode. The context is 256K, and 128K for the E-series:
 
 | Model             | Repo                         | Modalities         | Niche                              |
 | ----------------- | ---------------------------- | ------------------ | ---------------------------------- |
@@ -23,36 +24,37 @@ mode; context 256K (128K for the E-series):
 | EmbeddingGemma    | `google/embeddinggemma-300m` | text → vector      | RAG / retrieval (not a lane here)  |
 | ShieldGemma 2     | `google/shieldgemma-2-4b-it` | classifier         | safety filtering (not a lane here) |
 
-Budget-gate reality check: EVERY model in this table exceeds the default
+Budget gate: EVERY model in this table exceeds the default
 `scale_ceiling_params` of 200M — even gemma-3-270M. Any Gemma path needs a
-bigger-budget profile justified in budget.md first (001 used `budget: lora`,
-ceiling 12B).
+bigger-budget profile first. Justify that profile in budget.md (001 used
+`budget: lora`, ceiling 12B).
 
-## Loading — what the model group must know
+## Load the model — what the model group must know
 
 - `google/gemma-4-E2B-it` is a **multi-tower** `Gemma4ForConditionalGeneration`
   (language + vision + audio towers) [001]. Plain
   `AutoModelForCausalLM.from_pretrained` works for text SFT
-  (`configs/model/gemma_4_e2b_it.yaml`) [001]; [skills] instead uses
+  (`configs/model/gemma_4_e2b_it.yaml`) [001]. [skills] instead uses
   `AutoModelForMultimodalLM` + `AutoProcessor` as its default HF loader for
-  Gemma 4 regardless of modality.
+  Gemma 4, for every modality.
 - QLoRA is the `_4bit` model variant (`model=gemma_4_e2b_it_4bit` — nested
-  `BitsAndBytesConfig` node, nf4 + double quant): quantization is model
-  identity, never a trainer key [001]. Full recipe: lora.md.
-- Training a base (non `-it`) checkpoint: [skills] loads the processor from the
+  `BitsAndBytesConfig` node, nf4 + double quant). The quantization is model
+  identity, never a trainer key [001]. lora.md holds the full recipe.
+- To train a base (non `-it`) checkpoint, [skills] loads the processor from the
   `-it` counterpart repo.
 
 ## Chat template and loss masking — the #1 Gemma trap
 
 - Gemma 4 turns are `<|turn>role … <turn|>`, and the assistant role is named
-  **`model`** [checked]. Standard `messages` rows with `assistant` roles are
-  fine — the template maps `assistant` → `<|turn>model` [checked]. Never
-  hand-format; always `apply_chat_template`.
-- The template has **no `{% generation %}` markers** [checked] — TRL's
-  `assistant_only_loss` hard-fails on Gemma 4, the same failure class SmolLM2
-  hit in 002 (docs/008-example-distillation.md). [skills] works around it with a
-  custom collator that token-searches `<|turn>model\n` and masks everything
-  before it. The paths that work here without a custom collator:
+  **`model`** [checked]. Standard `messages` rows with `assistant` roles work,
+  because the template maps `assistant` → `<|turn>model` [checked]. Never
+  hand-format a turn. Always call `apply_chat_template`.
+- The template has **no `{% generation %}` markers** [checked]. TRL's
+  `assistant_only_loss` therefore hard-fails on Gemma 4. This is the same
+  failure class that SmolLM2 hit in 002 (docs/008-example-distillation.md). The
+  [skills] pack avoids the failure with a custom collator that token-searches
+  `<|turn>model\n` and masks everything before that marker. The paths that work
+  here without a custom collator:
   - `prompt` + `completion` data with `completion_only_loss: true` —
     template-free masking, verified on gemma-4-E2B [001].
   - `messages` data, unmasked full-conversation loss (the 002 posture) —
@@ -60,88 +62,92 @@ ceiling 12B).
 
 ## Recipe priors (one override per path; see the conflict note)
 
-What 001 actually verified on gemma-4-E2B QLoRA (matches the [skills] defaults):
-`r=16`, `lora_alpha=32`, dropout 0.05, LR `2e-4`, cosine + ~3% warmup [001].
+001 verified these values on gemma-4-E2B QLoRA, and they match the [skills]
+defaults: `r=16`, `lora_alpha=32`, dropout 0.05, LR `2e-4`, cosine + ~3% warmup
+[001].
 
 **Known conflict:** lora.md's no-regret recipe says r=256, `lora_alpha=16` held
-FIXED (never scale alpha with rank), dropout 0.0 — and the shipped
-`trl_sft_lora` preset encodes that. [skills]' `alpha = 2·r` rule is exactly what
-lora.md forbids as a tuning methodology. For Gemma paths, 001's values are the
-verified starting point; treat r-vs-alpha exploration per lora.md (tune `r`,
-keep alpha fixed) from there.
+FIXED (never scale alpha with rank), and dropout 0.0. The shipped `trl_sft_lora`
+preset encodes those values. [skills]' `alpha = 2·r` rule is exactly the tuning
+method that lora.md forbids. For a Gemma path, 001's values are the verified
+starting point. From there, explore r-vs-alpha per lora.md: tune `r`, and keep
+alpha fixed.
 
 - `target_modules` — **the presets are a trap on Gemma**: `trl_sft_lora` /
-  `trl_sft_qlora` ship `target_modules: all-linear`, so "omitting" the key in
-  your experiment config inherits `all-linear`, which attaches adapters to the
-  vision/audio towers (a real failure in the reference sweep 001 was built on —
-  docs/007). Override it with 001's explicit language-tower regex, or set it to
-  `null` to fall back to PEFT's Gemma-4 default (scoped to the LM layers
-  [skills]; `q_proj`/`v_proj` per lora.md). Fail hard on zero matches — lora.md
-  has the check.
-- `max_length` 2048–8192 for local/single-GPU runs — the model's full context
-  window (256K, 128K E-series) is a deployment feature, not a training default;
-  activations are the OOM lever [skills].
-- Full fine-tune LR: [skills] says `2e-5`, but that is a tiny-model default — at
-  Gemma scales (all ≥ 1B; E2B is ~5.1B total [001]) hyperparameter-priors.md
-  says sweep downward into 3e-6–1e-5 first.
-- DPO: SFT into your format FIRST — DPO straight on an out-of-domain base
-  degrades formatting [skills]. `beta=0.1` (0.1–0.5); with PEFT adapters,
+  `trl_sft_qlora` ship `target_modules: all-linear`. An experiment config that
+  omits the key therefore inherits `all-linear`. `all-linear` attaches the
+  adapters to the vision and audio towers. This is a real failure from the
+  reference sweep that 001 was built on (docs/007). Override the key with 001's
+  explicit language-tower regex. Or set the key to `null`, which falls back to
+  PEFT's Gemma-4 default (scoped to the LM layers [skills]; `q_proj`/`v_proj`
+  per lora.md). Fail hard on zero matches — lora.md has the check.
+- `max_length` 2048–8192 for local/single-GPU runs. The model's full context
+  window (256K, 128K E-series) is a deployment feature, not a training default.
+  The activations are the OOM lever [skills].
+- Full fine-tune LR: [skills] says `2e-5`, but that value is a tiny-model
+  default. At Gemma scales (all ≥ 1B; E2B is ~5.1B total [001]),
+  hyperparameter-priors.md says to sweep downward into 3e-6–1e-5 first.
+- DPO: run SFT into your format FIRST. DPO directly on an out-of-domain base
+  degrades the format [skills]. Use `beta=0.1` (0.1–0.5). With PEFT adapters,
   `ref_model=None` (implicit reference = base + disabled adapter) saves a full
   model of VRAM.
 - Reward modeling: `AutoModelForSequenceClassification` had **no Gemma 4
-  support** as of the [skills] snapshot — check before planning an RM path.
+  support** at the [skills] snapshot. Check the support before you plan an RM
+  path.
 
 ## Multimodal SFT (vision/audio) — when a path needs it
 
-Not a shipped lane; plan as a custom-collator `trl_sft` path [skills]:
+Multimodal SFT is not a shipped lane. Plan it as a custom-collator `trl_sft`
+path [skills]:
 
-- Rows keep `messages`, but `content` becomes a block list:
+- The rows keep `messages`, but `content` becomes a block list:
   `{"type": "image", "url": …}` / `{"type": "audio", "url": …}` +
-  `{"type": "text", "text": …}`. Audio: 16 kHz mono (librosa), E2B/E4B/12B only;
-  vision: any Gemma 4.
-- The collator does `apply_chat_template` + processor batching itself, so set
+  `{"type": "text", "text": …}`. Audio needs 16 kHz mono (librosa), and
+  E2B/E4B/12B only. Vision works on any Gemma 4.
+- The collator itself does `apply_chat_template` and the processor batching. Set
   `remove_unused_columns: false` and
-  `dataset_kwargs: {skip_prepare_dataset: true}` — otherwise TRL's default prep
+  `dataset_kwargs: {skip_prepare_dataset: true}`. Otherwise TRL's default prep
   destroys the block structure.
 - [skills]' QLoRA-audio runs install a `masked_scatter` dtype-coercion patch
-  (labeled an audio dtype fix) — expect dtype friction there.
+  (labeled an audio dtype fix). Expect dtype problems there.
 
 ## Distillation ladder
 
 `tokenizer.json` is bit-identical across gemma-4-E2B-it and gemma-4-31B-it (same
-HF blob id) [checked], so teacher 31B/26B-A4B → student E2B/E4B works with the
-token-level `trl_gkd` lane — same pattern as the SmolLM2 ladder in 002/003
-(docs/008). Text-level distillation (the [skills] `distill_dataset.py` flow:
-teacher generates strings → student SFTs) is our `trl_sft`-on-teacher-data lane
-/ the distill-traces skill.
+HF blob id) [checked]. A teacher 31B/26B-A4B → student E2B/E4B therefore works
+with the token-level `trl_gkd` lane. This is the same pattern as the SmolLM2
+ladder in 002/003 (docs/008). Text-level distillation (the [skills]
+`distill_dataset.py` flow: the teacher generates the strings, then the student
+SFTs on them) is our `trl_sft`-on-teacher-data lane, or the distill-traces
+skill.
 
 ## After publish: export targets [skills]
 
-The publish-model gate ships HF safetensors; downstream conversions, when an
-experiment's deliverable needs them:
+The publish-model gate ships HF safetensors. Use a downstream conversion when an
+experiment's deliverable needs one:
 
 - **GGUF** (llama.cpp / LM Studio / Ollama): convert the merged model with
-  llama.cpp's converter. Official `{model}-qat-q4_0-gguf` variants exist —
-  quantization-aware-trained, better than post-hoc Q4 of the BASE model; your
-  fine-tune still needs its own conversion.
+  llama.cpp's converter. Official `{model}-qat-q4_0-gguf` variants exist. They
+  are quantization-aware-trained, and better than a post-hoc Q4 of the BASE
+  model. Your fine-tune still needs its own conversion.
 - **vLLM / SGLang**: `{model}-qat-w4a16-ct` compressed-tensors variants.
-- **Faster eval/serving**: Gemma 4 MTP speculative decoding — pair the target
+- **Faster eval/serving**: Gemma 4 MTP speculative decoding. Pair the target
   with its `{model}-assistant` drafter repo.
 - **On-device**: LiteRT-LM (`.litertlm`, E2B/E4B).
 
 ## Deliberately not adopted
 
-- **Unsloth** ([skills] recommends it first for local single-GPU): it patches
-  models at import time and forks the training path — this repo's lanes stay
-  plain TRL under the uv lock, and real runs go to remote CUDA boxes anyway
-  (compute-lanes.md). Revisit only if a single-GPU-local experiment is
-  VRAM-blocked on the TRL lane.
+- **Unsloth** ([skills] recommends it first for local single-GPU): Unsloth
+  patches the models at import time, and it forks the training code. This repo's
+  lanes stay plain TRL under the uv lock. Real runs go to remote CUDA boxes
+  anyway (compute-lanes.md). Revisit Unsloth only if a single-GPU-local
+  experiment is VRAM-blocked on the TRL lane.
 - **gemma-dev app tooling** (Gradio/Vertex/transformers.js serving): outside
-  this repo's scope — experiments end at publish.
+  this repo's scope. An experiment ends at publish.
 
 ## Doc lookup
 
-Index: fetch `https://ai.google.dev/gemma/docs/llms.txt`, then the per-page
-`….md.txt` URLs (e.g. `core/prompt-formatting-gemma4.md.txt`,
-`capabilities/text/function-calling-gemma4.md.txt`). Cheaper and fresher than
-scraping HTML.
+Index: fetch `https://ai.google.dev/gemma/docs/llms.txt`. Then fetch the
+per-page `….md.txt` URLs (e.g. `core/prompt-formatting-gemma4.md.txt`,
+`capabilities/text/function-calling-gemma4.md.txt`). This method is cheaper and
+fresher than a scrape of the HTML.

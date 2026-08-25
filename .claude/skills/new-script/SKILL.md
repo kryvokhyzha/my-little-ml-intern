@@ -8,24 +8,24 @@ description:
 
 # new-script
 
-Create a paired Hydra entrypoint: a `scripts/python/<name>.py` script and a
-`configs/<name>.yaml` config that composes from the existing `configs/main.yaml`
-defaults.
+Create a paired Hydra entrypoint. The pair is a `scripts/python/<name>.py`
+script and a `configs/<name>.yaml` config. The config composes from the existing
+`configs/main.yaml` defaults.
 
 ## Steps
 
-1. **Resolve the name.** Use `$ARGUMENTS` if provided, otherwise ask the user
-   for a short name (one line). Slugify to `kebab-case` for the file stem; the
-   script is allowed to keep hyphens (`scripts/python/foo-bar.py` is fine since
-   it's invoked via `python <path>`, not imported).
+1. **Resolve the name.** Use `$ARGUMENTS` when the user provides it. Otherwise
+   ask the user for a short name (one line). Slugify the name to `kebab-case`
+   for the file stem. The script keeps its hyphens: `python <path>` runs
+   `scripts/python/foo-bar.py`, and no module imports it.
 2. **Pick the prefix.**
-   - If the user signals the script is exploratory / not ready to commit
-     ("draft", "scratch", "WIP", "temporary"), use the `999-` prefix —
-     `scripts/python/999-*.py` and `docs/999-*.md` are gitignored, so the file
-     stays local until promoted.
-   - Otherwise, check the existing config style in `configs/`: if numbered
-     configs exist (e.g. `001-…yaml`, `002-…yaml`), use the next free 3-digit
-     prefix to match the convention.
+   - The user sometimes signals that the script is exploratory or not ready to
+     commit ("draft", "scratch", "WIP", "temporary"). Use the `999-` prefix for
+     that script. Git ignores `scripts/python/999-*.py` and `docs/999-*.md`. The
+     script stays local until you promote it.
+   - Otherwise, check the existing config style in `configs/`. If numbered
+     configs exist (for example `001-…yaml`, `002-…yaml`), use the next free
+     3-digit prefix. This matches the convention.
    - Otherwise use the plain name.
 3. **Create the config** `configs/<prefix?>-<name>.yaml`:
 
@@ -37,7 +37,7 @@ defaults.
    # Script-specific parameters go here.
    ```
 
-   Only add parameters the user has actually described — don't invent fields.
+   Add only the parameters that the user describes. Do not invent any fields.
 
 4. **Create the script** `scripts/python/<prefix?>-<name>.py`:
 
@@ -67,14 +67,14 @@ defaults.
    ```
 
    Replace `<config-stem>` with the config filename without `.yaml`. Keep the
-   `rootutils.setup_root(...)` call — it's how scripts find the project root.
-   Keep `load_dotenv(find_dotenv(), override=True)` right after it so values in
-   `.env` take precedence over the ambient shell environment (matches the
-   project's logger / HF / WANDB conventions).
+   `rootutils.setup_root(...)` call. The script finds the project root through
+   this call. Keep `load_dotenv(find_dotenv(), override=True)` directly after
+   it. The values in `.env` then take precedence over the ambient shell
+   environment. This matches the project's logger / HF / WANDB conventions.
 
-5. **Report back**: link both files (e.g.
-   `[scripts/python/003-foo.py](scripts/python/003-foo.py)`,
-   `[configs/003-foo.yaml](configs/003-foo.yaml)`) and show the run command:
+5. **Report back.** Link both files, for example
+   `[scripts/python/003-foo.py](scripts/python/003-foo.py)` and
+   `[configs/003-foo.yaml](configs/003-foo.yaml)`. Then show the run command:
 
    ```
    uv run python scripts/python/<file>.py
@@ -82,22 +82,21 @@ defaults.
 
 ## Notes
 
-- The script lives in `scripts/python/` (not `src/`) — `scripts/python/*` is
-  exempt from `E402` in `pyproject.toml`, which is why `rootutils.setup_root`
-  and `load_dotenv(...)` can sit between imports and other top-level code.
-- `python-dotenv` and `omegaconf` are declared in `[project].dependencies`, so
+- The script lives in `scripts/python/`, not in `src/`. `pyproject.toml` exempts
+  `scripts/python/*` from `E402`. For this reason `rootutils.setup_root` and
+  `load_dotenv(...)` can sit between the imports and other top-level code.
+- `[project].dependencies` declares `python-dotenv` and `omegaconf`. Therefore
   `from dotenv import ...` and `from omegaconf import DictConfig` resolve on a
-  freshly synced env. If you ever see an import error, run
-  `make uv_install_deps`.
-- Use `loguru.logger` (already configured globally). Do not instantiate
+  freshly synced env. Run `make uv_install_deps` when you see an import error.
+- Use `loguru.logger`. The project configures it globally. Do not instantiate
   `logging.getLogger`.
-- Use Hydra for configuration. Call `main()` directly under
-  `if __name__ == "__main__":` — do **not** wrap a `@hydra.main`-decorated
-  function in `fire.Fire(...)`. Hydra and Fire both parse `sys.argv`, so Fire
-  swallows Hydra's `key=value` overrides (it treats them as the function's args)
-  and the entrypoint breaks. Reach for `fire.Fire(...)` only for multi-command
-  CLIs that have **no** `@hydra.main` decorator. Don't add `argparse`/`click`.
-- If the script needs reusable logic, factor it into `src/<package>/...` and
-  keep `scripts/python/<name>.py` thin.
-- Don't create the file under `trash/` — that's reserved for throwaway scripts.
-  New committed entrypoints belong in `scripts/python/`.
+- Use Hydra for the configuration. Call `main()` directly under
+  `if __name__ == "__main__":`. Do **not** wrap a `@hydra.main`-decorated
+  function in `fire.Fire(...)`. Hydra and Fire both parse `sys.argv`. Fire then
+  consumes Hydra's `key=value` overrides as the function's own arguments. The
+  entrypoint fails. Use `fire.Fire(...)` only for a multi-command CLI that has
+  **no** `@hydra.main` decorator. Do not add `argparse`/`click`.
+- If the script needs reusable logic, move that logic into `src/<package>/...`.
+  Keep `scripts/python/<name>.py` thin.
+- Do not create the file under `trash/`. That directory holds throwaway scripts
+  only. A new committed entrypoint belongs in `scripts/python/`.

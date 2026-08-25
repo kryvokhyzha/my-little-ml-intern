@@ -1,7 +1,7 @@
 # Dataset formats per training method
 
-Format mismatch is the most common training failure. Verify actual column names
-against this table before any GPU spend — the check costs seconds.
+A format mismatch is the most common training failure. Verify the actual column
+names against this table before any GPU spend. The check costs seconds.
 
 | Method | Trainer group      | Required columns                                                                                                           |
 | ------ | ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
@@ -13,33 +13,37 @@ against this table before any GPU spend — the check costs seconds.
 
 Notes:
 
-- **SFT** auto-detects which of the three shapes it got. `messages` rows must
-  alternate roles the model's chat template accepts; a `text` column is used
-  verbatim; `prompt`/`completion` are concatenated with completion-only loss.
-- **DPO** is where ~90% of public preference datasets need mapping —
-  `instruction`/`chosen_response`/`question`/`response_j` style columns are
-  common and all wrong. Check every DPO dataset, no exceptions.
-- **GRPO** has no completion column to validate — the contract moves to the
-  reward functions; read `references/grpo-rewards.md` before writing one.
-- Extra columns beyond the required ones are usually tolerated by TRL but map
-  them away anyway — silent column pickup has caused wrong-field training.
+- **SFT** auto-detects which of the three shapes it receives. `messages` rows
+  must alternate the roles that the model's chat template accepts. SFT uses a
+  `text` column verbatim. SFT concatenates `prompt` and `completion`, and
+  applies a completion-only loss.
+- **DPO** needs a column mapping for ~90% of public preference datasets. Columns
+  in the `instruction`/`chosen_response`/`question`/`response_j` style are
+  common, and every one of them is wrong. Check every DPO dataset. There are no
+  exceptions.
+- **GRPO** has no completion column to validate. The contract moves to the
+  reward functions. Read `references/grpo-rewards.md` before you write one.
+- TRL usually tolerates extra columns beyond the required ones. Map the extra
+  columns away anyway. A silent column pickup has caused training on the wrong
+  field.
 
 ## Tool-calling SFT
 
-Tool-use rows are `messages` plus a `tools` column of JSON tool schemas when the
-model's chat template consumes it — check the template before assuming it does.
-Checks before spend:
+A tool-use row holds `messages` plus a `tools` column of JSON tool schemas. The
+row needs the `tools` column only when the model's chat template consumes it.
+Check the template first. Do not assume that it consumes the column. Checks
+before the spend:
 
-- Every tool name appearing in `messages` exists in the `tools` schemas.
+- Every tool name that appears in `messages` exists in the `tools` schemas.
 - Tool-call arguments parse as JSON (or the model's expected structured format).
 - Tool-result observations must not leak held-out labels.
-- Include success AND recovery-after-failure examples — a model trained only on
-  clean successes cannot repair a failed call.
+- Include success examples AND recovery-after-failure examples. A model that you
+  train only on clean successes cannot repair a failed call.
 - Evaluate tool-call validity separately from final answer quality.
 
 ## Inspect a dataset quickly (CPU, seconds)
 
-Preferred — load 5 rows and eyeball schema plus one full example:
+Preferred method — load 5 rows. Read the schema and one full example:
 
 ```bash
 uv run python -c "
@@ -50,26 +54,28 @@ print(ds[0])
 "
 ```
 
-No-download alternative via the datasets-server API:
+No-download alternative through the datasets-server API:
 
 ```bash
 curl -s 'https://datasets-server.huggingface.co/first-rows?dataset=<hub-slug>&config=default&split=train' | head -c 3000
 ```
 
-Also check split names (`train` is not guaranteed) and row counts — confirm the
-splits named in the `cfg.data.train` / `cfg.data.eval` nodes exist. Column
-mismatches are also enforced in code at load time
-(`data.loading.validate_columns` raises before any GPU step), but that check
-sees only column names — this audit is about what's IN them: class imbalance,
-empty strings, duplicated rows, wildly long outliers. Looking at data is the
-cheapest performance win available and prevents failed jobs. Also verify
-`max_length` truncation does not cut the decisive assistant/tool turn — measure
-sampled tokenized lengths against `trainer.args` before launch.
+Also check the split names and the row counts. The dataset does not always have
+a `train` split. Confirm that the dataset has the splits that `cfg.data.train`
+and `cfg.data.eval` name.
 
-## When mapping is needed
+The code also enforces the column names at load time:
+`data.loading.validate_columns` raises before any GPU step. That check reads
+only the column names. This inspection reads what is inside them: class
+imbalance, empty strings, duplicated rows, and very long outliers. It is the
+cheapest performance win available, and it prevents failed jobs. Also verify
+that `max_length` truncation does not cut the decisive assistant/tool turn.
+Measure the sampled tokenized lengths against `trainer.args` before the launch.
 
-Write the mapping in the experiment script (or a preprocessing step it calls),
-keyed to the actual columns you observed:
+## When the dataset needs a mapping
+
+Write the mapping in the experiment script. A preprocessing step that the script
+calls also works. Key the mapping to the actual columns that you observed:
 
 ```python
 def to_dpo(example):
@@ -85,14 +91,14 @@ dataset = dataset.map(to_dpo, remove_columns=dataset.column_names)
 Rules:
 
 - `remove_columns=dataset.column_names` — leave only the target schema.
-- Re-run the 5-row inspection on the mapped dataset before smoking.
-- The mapping is part of the run's reproducibility: it lives in the committed
+- Re-run the 5-row inspection on the mapped dataset before the smoke run.
+- The mapping is part of the run's reproducibility. It lives in the committed
   experiment script, not in a throwaway shell one-liner.
-- If the dataset cannot be mapped to the method (missing signal, e.g. no
-  rejected answers for DPO), that is a blocker, not an invitation to swap
-  datasets — never substitute silently. Interactive: ask. Headless: fire
-  `scripts/bash/notify.sh approval_required "<proposed substitute>"` and record
-  the assumption in task.md.
+- If you cannot map the dataset to the method, that is a blocker. A missing
+  signal is one cause, for example a DPO dataset with no rejected answers. Never
+  substitute another dataset silently. Interactive: ask. Headless: fire
+  `scripts/bash/notify.sh approval_required "<proposed substitute>"`. Then
+  record the assumption in task.md.
 
-The smoke gate (`smoke_test=true`) slices to ≤ 32 rows, so a mapped dataset gets
-exercised end-to-end by the smoke run before any long spend.
+The smoke gate (`smoke_test=true`) slices the dataset to ≤ 32 rows. The smoke
+run therefore exercises a mapped dataset end-to-end before any long spend.

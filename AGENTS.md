@@ -1,50 +1,50 @@
 # AGENTS.md
 
-Guidance for AI coding agents when working in this repository.
+This file gives guidance to the AI coding agents that work in this repository.
 
 ## Project overview
 
-`my-little-ml-intern` — a personal "ML intern": Claude Code skills plus a
-code-enforced guardrail library for ML/LLM experimentation. Python 3.13, `uv`,
-Hydra configs, Loguru, Fire. Project root is anchored by `.project-root` (used
-via `rootutils`).
+`my-little-ml-intern` is a personal "ML intern". It gives you Claude Code skills
+and a guardrail library that the code enforces for ML/LLM experiments. The stack
+is Python 3.13, `uv`, Hydra configs, Loguru, and Fire. `rootutils` reads
+`.project-root` and sets the project root from it.
 
 Three parts work together:
 
-- **`.claude/skills/`** — the skill pack (experiment scaffolding, training
-  discipline, verification, tracking, literature research).
-- **`src/intern/`** — enforcement library: verification, budget, ledger,
-  dependency-age gates with nonzero exit codes. Skills instruct; these scripts
-  refuse.
-- **`src/training/`** — lane adapters mapping Hydra configs onto TRL (SFT/DPO),
-  PyTorch Lightning, and axolotl (rendered YAML for remote GPU boxes; never a
-  local dependency).
+- **`.claude/skills/`** — the skill pack. It covers experiment scaffolds, the
+  training discipline, verification, tracking, and literature research.
+- **`src/intern/`** — the enforcement library. It holds the verification,
+  budget, ledger, and dependency-age gates. These gates exit with a nonzero
+  code. The skills give instructions. These scripts refuse the run.
+- **`src/training/`** — the lane adapters. They map Hydra configs onto TRL
+  (SFT/DPO), PyTorch Lightning, and axolotl. The axolotl lane takes rendered
+  YAML for a remote GPU machine. axolotl is never a local dependency.
 
-The full contract (module APIs, artifact formats, skill conventions) lives in
-[docs/001-architecture.md](docs/001-architecture.md) — read it before changing
-`src/intern`, `src/training`, or any skill.
+[docs/001-architecture.md](docs/001-architecture.md) holds the full contract:
+the module APIs, the artifact formats, and the skill conventions. Read that
+document before you change `src/intern`, `src/training`, or any skill.
 
 ## Tech stack and key conventions
 
 - **Python**: `>=3.11,<3.14`, target `py313`.
-- **Package manager**: `uv` (never use `pip`/`poetry`/`conda` directly here).
-  Lockfile is `uv.lock`.
-- **Build backend**: `hatchling`; package lives under `src/`.
+- **Package manager**: `uv`. Never use `pip`, `poetry`, or `conda` directly
+  here. The lockfile is `uv.lock`.
+- **Build backend**: `hatchling`. The package lives under `src/`.
 - **Configuration**: Hydra (`configs/`, entrypoint `configs/main.yaml`).
 - **Logging**: Loguru via `src/helper/logging` (singleton `LoggerConfig`). Env
   vars: `ENV_MODE`, `LOG_LEVEL`, `JSON_LOGS`, `COLORIZE`. Custom levels:
   `WARNONCE`, `DEPRECATED`.
 - **CLI**: `fire` for command-line entry points.
 - **Display/UX**: `rich` for terminal output.
-- **Path/root resolution**: `rootutils` (use it instead of computing paths from
-  `__file__`).
+- **Path/root resolution**: `rootutils`. Use it instead of a path that you
+  compute from `__file__`.
 - **Training**: `torch`, `lightning`, `trl` (+`peft`), `transformers`,
   `datasets`, `accelerate`. axolotl runs remotely via rendered YAML only.
-- **Tracking**: `trackio` (primary) / `wandb`, selected by the Hydra `tracking`
-  group — never hardcode a backend.
-- **Dependency freshness rule**: latest versions, but only releases published
-  **≥ 1 week ago** (checked by `intern.deps`; run
-  `uv run python scripts/python/intern.py deps`).
+- **Tracking**: `trackio` (primary) / `wandb`. The Hydra `tracking` group
+  selects the backend. Never hardcode a backend.
+- **Dependency freshness rule**: use the latest versions, but only the releases
+  published **≥ 1 week ago**. `intern.deps` checks this rule. Run
+  `uv run python scripts/python/intern.py deps`.
 
 ## Repository layout
 
@@ -67,12 +67,12 @@ Makefile        # Common uv / pre-commit shortcuts
 .project-root   # Marker file for rootutils — do not delete
 ```
 
-Some of these directories are created on demand — create them when they're
-needed, don't scaffold empty ones.
+You create some of these directories on demand. Create a directory when you need
+it. Do not scaffold an empty directory.
 
 ## Common commands
 
-Prefer `make` targets when available:
+Prefer a `make` target when one exists:
 
 | Task                      | Command                                              |
 | ------------------------- | ---------------------------------------------------- |
@@ -86,19 +86,19 @@ Prefer `make` targets when available:
 | Run tests                 | `uv run pytest`                                      |
 | Lint / format (manual)    | `uv run ruff check --fix .` / `uv run ruff format .` |
 
-Always run Python via `uv run ...` to ensure the locked environment is used.
+Always run Python with `uv run ...`. This command uses the locked environment.
 
 ## Code style
 
-Enforced by Ruff (`pyproject.toml`):
+Ruff enforces these rules (`pyproject.toml`):
 
 - Line length **120**, target `py313`.
 - Rules: `E, F, W, I, D` (pycodestyle, pyflakes, isort, pydocstyle).
 - isort: 2 blank lines after imports.
-- Docstrings: required on public modules/classes/functions is **disabled**
-  (D100–D107 ignored). Use Google-style docstrings (already in use — see
-  `src/helper/logging/__init__.py`).
-- Notebooks are linted via `nbqa`; `nbstripout` strips outputs on commit.
+- Docstrings: Ruff keeps the D100–D107 checks **disabled**, so a public module,
+  class, or function does not need one. Use Google-style docstrings.
+  `src/helper/logging/__init__.py` shows the style.
+- `nbqa` lints the notebooks. `nbstripout` strips the outputs on commit.
 
 Additional conventions:
 
@@ -107,32 +107,68 @@ Additional conventions:
   `logging.getLogger`.
 - Use `pydantic` for data models / config validation.
 - Use `joblib` for parallelism and caching when appropriate.
-- Type-hint new code; tests can be lighter.
+- Type-hint new code. Tests can use fewer type hints.
+
+## Writing style (ASD-STE100, with Strunk for prose)
+
+All prose in this repo follows ASD-STE100 Simplified Technical English. Agents
+read these files and act on them, so ambiguity causes wrong actions.
+
+**Sentence rules** — apply everywhere:
+
+- Write in the active voice. Name the actor: "the gate refuses the run", not
+  "the run is refused".
+- Give one instruction per sentence. Put each step in its own sentence.
+- Keep procedural sentences to 20 words. Keep descriptive sentences to 25.
+- Keep a procedural paragraph to 6 sentences. Keep a descriptive paragraph to 1
+  topic.
+- Use simple tenses. Prefer the present tense.
+- Keep the articles. Write "the budget gate", not "budget gate".
+- Do not use an `-ing` form as a verb. Write "run the smoke test", not "running
+  the smoke test". An `-ing` form is allowed inside a technical name.
+- Use one word for one meaning. This repo says **gate** for a blocking check,
+  **lane** for a trainer or compute adapter, and **path** for one solution
+  attempt inside an experiment. Do not swap in synonyms.
+- Do not use slang, idioms, or metaphor. Write the literal fact.
+- Put a complex condition in a vertical list, not in one long sentence.
+
+**Two deliberate deviations from the standard:**
+
+1. We do not adopt the STE controlled dictionary of about 900 words. This repo
+   needs its own technical vocabulary. Any ML, Python, or tooling term is a
+   Technical Name, and this repo allows it.
+2. `docs/` explains tradeoffs and rationale, which STE procedures cannot carry.
+   Those files keep the sentence rules above but may argue and qualify. Strunk's
+   rules govern them: omit needless words, use the positive form, use concrete
+   language, and put the emphatic word last.
+
+Where the two guides conflict in an instruction file, STE wins. Where they
+conflict in `docs/`, Strunk wins.
 
 ## Testing
 
 - Framework: `pytest` + `pytest-env`.
-- `pythonpath = ["src", "."]` (set in `pyproject.toml`) — import as
+- `pyproject.toml` sets `pythonpath = ["src", "."]` — import as
   `from helper... import ...`.
-- Place tests alongside or under a top-level `tests/` directory (create if
-  absent).
-- For async code, default fixture loop scope is `function`.
+- Place the tests beside the code, or under a top-level `tests/` directory.
+  Create that directory if it does not exist.
+- For async code, the default fixture loop scope is `function`.
 
-## Adding dependencies
+## Add dependencies
 
-- Runtime: edit `[project].dependencies` in `pyproject.toml`, then
+- Runtime: edit `[project].dependencies` in `pyproject.toml`. Then run
   `uv sync --all-extras --no-install-project`.
 - Dev / lint / test / notebook: use the matching `[dependency-groups]` group.
-- After any dependency change, `uv.lock` must be updated (pre-commit `uv-lock`
-  hook enforces this).
-- Pin reasonably: prefer `~=` for libraries we track closely, `>=,<` for broad
-  ranges.
+- After any dependency change, update `uv.lock`. The pre-commit `uv-lock` hook
+  enforces this rule.
+- Pin with care. Prefer `~=` for a library that we track closely. Use `>=,<` for
+  a broad range.
 
-## Upgrading dependencies (read the changelog first)
+## Upgrade dependencies (read the changelog first)
 
 Two mechanisms enforce the 1-week freshness rule. Both run at **pre-commit and
-CI time** — there is no scheduled job, because a stale dependency is only
-actionable when someone is editing dependencies.
+CI time**. There is no scheduled job. A stale dependency is only actionable when
+someone edits the dependencies.
 
 |                 | `exclude-newer = "7 days"` (`[tool.uv]`)                    | `intern.py deps`                                         |
 | --------------- | ----------------------------------------------------------- | -------------------------------------------------------- |
@@ -142,164 +178,170 @@ actionable when someone is editing dependencies.
 | Too-young floor | unsatisfiable-resolution error                              | names the package, its age, and its release date         |
 | Blind to        | what you could upgrade to (it stays silent)                 | transitive deps (the real attack surface)                |
 
-Neither replaces the other. `exclude-newer` is the supply-chain guard — a
-compromised release arrives as a _transitive_ dependency far more often than as
-a direct one, and only the resolver setting blocks that. But on a **range**
-specifier it reports a too-young floor merely as
-`Because only <pkg><=<old> is available …`, never mentioning the cooldown (exact
-`==` pins do get a clear message), and it stays silent about upgrades you could
-take.
+Neither mechanism replaces the other. `exclude-newer` is the supply-chain guard.
+A compromised release arrives as a _transitive_ dependency far more often than
+as a direct one. Only the resolver setting blocks that release. But on a
+**range** specifier, `exclude-newer` reports a too-young floor only as
+`Because only <pkg><=<old> is available …`. That message never names the
+cooldown. An exact `==` pin does get a clear message. `exclude-newer` also stays
+silent about the upgrades that you could take.
 
-`uv run python scripts/python/intern.py deps` lists every dependency with a
-newer **eligible** release (latest, but published ≥ 1 week ago) **and prints
-that package's changelog URL**. Start an upgrade from the release notes, never
-from the version number alone.
+`uv run python scripts/python/intern.py deps` lists every dependency that has a
+newer **eligible** release (latest, but published ≥ 1 week ago). It also
+**prints that package's changelog URL**. Start an upgrade from the release
+notes. Never start from the version number alone.
 
-1. **Run the gate** to see what is eligible. A package missing from the list is
-   either current or has only releases younger than the 1-week floor — the
-   latter is a wait, not a block (note the date it becomes eligible).
-2. **Read the notes** between the pinned floor and the target for breaking
-   changes, removals, and behavior changes. Check them against what this repo
-   actually calls (`grep -rn "<pkg>" src/ scripts/ configs/`) rather than
-   skimming for scary words.
+1. **Run the gate** to see what is eligible. A package that the list does not
+   name is current, or it has only releases younger than the 1-week floor. The
+   second case is a wait, not a block. Note the date when the package becomes
+   eligible.
+2. **Read the notes** between the pinned floor and the target. Look for breaking
+   changes, removals, and behavior changes. Check each change against the code
+   that this repo actually calls (`grep -rn "<pkg>" src/ scripts/ configs/`). Do
+   not skim the notes for alarming words.
 3. **Edit the specifier by hand.** A three-part `~=` pin means
    `>= 1.21.0, < 1.22.0`, so `uv lock --upgrade` alone will NOT move a minor
-   version — that is deliberate (upgrades are decisions), but it means the
-   version string in `pyproject.toml` is the real knob.
-4. **Re-lock and verify**: `uv sync --all-extras --no-install-project`, then
-   `uv run pytest`, then a smoke run
-   (`uv run python scripts/python/000-tiny-sft-smoke.py smoke_test=true`) — its
-   loss is the canonical cross-version regression check.
+   version. This behavior is deliberate, because an upgrade is a decision. The
+   version string in `pyproject.toml` is the control that you must edit.
+4. **Re-lock and verify**. Run `uv sync --all-extras --no-install-project`. Then
+   run `uv run pytest`. Then run a smoke run
+   (`uv run python scripts/python/000-tiny-sft-smoke.py smoke_test=true`). The
+   loss of that smoke run is the canonical cross-version regression check.
 5. **Note behavior changes that invalidate recorded numbers.** If the upgrade
-   changes a trainer's loss or masking, past experiment results are no longer
-   comparable across that boundary: say so in the affected `results.md` rather
-   than silently comparing. Re-run the baseline instead.
+   changes the loss or the masking of a trainer, past experiment results are no
+   longer comparable across that boundary. Write that fact in the affected
+   `results.md`. Do not compare the numbers in silence. Re-run the baseline
+   instead.
 
-A deliberate exception to the 1-week floor is a dated, self-expiring entry in
-`[tool.intern.deps.exceptions]` (`package = "YYYY-MM-DD"`) — reviewable in the
-diff, and it re-arms itself. Remove entries once they expire. uv's native
-equivalent, `exclude-newer-package = { pkg = false }`, is a **permanent**
-opt-out with no expiry, so prefer the dated entry; reach for the uv one only
-when the resolver itself must be unblocked (`uv lock` fails because every
-version satisfying a specifier is too young).
+A dated, self-expiring entry in `[tool.intern.deps.exceptions]`
+(`package = "YYYY-MM-DD"`) is the deliberate exception to the 1-week floor. A
+reviewer sees the entry in the diff, and the entry re-arms itself. Remove an
+entry after it expires. The native uv equivalent,
+`exclude-newer-package = { pkg = false }`, is a **permanent** opt-out with no
+expiry. Prefer the dated entry. Use the uv option only when you must unblock the
+resolver itself. That case occurs when `uv lock` fails because every version
+that satisfies a specifier is too young.
 
 ## Hydra configs
 
 - Entry config: `configs/main.yaml`. Compose groups via `defaults:` lists.
-- Output dir defaults are disabled (no `outputs/` clutter) — see
-  `configs/hydra/default.yaml`.
-- When adding a new config group, create a subdirectory under `configs/` and
-  reference it from `defaults`.
+- `configs/hydra/default.yaml` disables the output directory defaults, so Hydra
+  creates no `outputs/` directory.
+- To add a new config group, create a subdirectory under `configs/`. Then
+  reference that subdirectory from `defaults`.
 
 ## ML experiments (the core convention)
 
 One experiment number = three artifacts: `scripts/python/NNN-<slug>.py` +
-`configs/NNN-<slug>.yaml` + `experiments/NNN-<slug>/`. Scaffold with the
-`new-experiment` skill; `999-` is gitignored scratch and exempt from gates. Full
-formats in [docs/001-architecture.md](docs/001-architecture.md).
+`configs/NNN-<slug>.yaml` + `experiments/NNN-<slug>/`. Scaffold the triple with
+the `new-experiment` skill. The `999-` prefix is gitignored scratch, and the
+gates do not apply to it. [docs/001-architecture.md](docs/001-architecture.md)
+gives the full formats.
 
-Non-negotiable rules (enforced by `scripts/python/intern.py` exit codes):
+Non-negotiable rules — the exit codes of `scripts/python/intern.py` enforce
+them:
 
-- **Smoke before scale**: every training run starts with `smoke_test=true` (1
-  step, tiny slice) and must print `VERDICT: TRAIN_OK`.
-- **Budget gate**: check `intern.py budget --experiment NNN can-launch` before
-  launching a path; record spend after.
-- **Verify gate**: never write `results.md` or report success unless
-  `intern.py verify` exited 0. A failed gate means the run failed, regardless of
-  loss. A low loss number is never evidence the model works.
-- **One variable per path**: prefer one Hydra override per experiment path;
-  hypotheses in `plan.md` need mechanism, expected numeric delta, and a
+- **Smoke before scale**: start every training run with `smoke_test=true` (1
+  step, tiny slice). The run must print `VERDICT: TRAIN_OK`.
+- **Budget gate**: run `intern.py budget --experiment NNN can-launch` before you
+  launch a path. Record the spend afterwards.
+- **Verify gate**: never write `results.md` and never report success unless
+  `intern.py verify` exited 0. A failed gate means the run failed, whatever the
+  loss shows. A low loss number is never evidence that the model works.
+- **One variable per path**: prefer one Hydra override per experiment path. Each
+  hypothesis in `plan.md` needs a mechanism, an expected numeric delta, and a
   falsification condition.
-- Scripts that import from `src/` add `sys.path.insert(0, str(root / "src"))`
-  right after `rootutils.setup_root(...)` — library imports stay bare
-  (`from intern.verify import ...`), never `from src....`. The same style holds
-  **inside** `src/` packages: absolute bare imports
-  (`from intern.scaffold import ...`, `from training.runtime import ...`), no
-  relative imports (`from .scaffold import ...`).
+- A script that imports from `src/` adds `sys.path.insert(0, str(root / "src"))`
+  directly after `rootutils.setup_root(...)`. The library imports stay bare
+  (`from intern.verify import ...`). Never write `from src....`. The same style
+  holds **inside** the `src/` packages: use absolute bare imports
+  (`from intern.scaffold import ...`, `from training.runtime import ...`). Do
+  not use a relative import (`from .scaffold import ...`).
 
 ## Docs conventions (`docs/`)
 
-`docs/` is the home for plans, design notes, research summaries, and analyses
-produced during work — anything that should outlive a single conversation.
+`docs/` holds the plans, design notes, research summaries, and analyses from
+your work. Put any content there that must outlive a single conversation.
 
-- **Prefer writing to `docs/` over dumping long analyses into chat.** When the
-  user asks for a plan, investigation write-up, or comparison, save it as a file
-  and reference it.
+- **Write a long analysis to `docs/`, not to the chat only.** When the user asks
+  for a plan, an investigation write-up, or a comparison, save it as a file and
+  reference that file.
 - **Naming**:
   - `NNN-kebab-case-title.md` — numbered, ordered series of substantive docs
     (e.g. `001-data-pipeline.md`, `002-eval-metrics.md`). Use the next free
     3-digit prefix.
   - `099-*.md` — exploratory / experimental notes that are not part of the main
     numbered series.
-  - `999-*.md` — temporary / scratch docs intended to be deleted or folded back
-    into a numbered doc later. **Gitignored** (see `.gitignore`), so safe for
-    in-progress notes you don't want to commit yet.
+  - `999-*.md` — temporary or scratch docs. You delete them later, or you fold
+    them back into a numbered doc. Git **ignores** them (see `.gitignore`), so
+    they are safe for the in-progress notes that you do not want to commit yet.
   - Unprefixed `kebab-case.md` — standalone reference notes that don't belong to
     a sequence (rationales, workflow guides, one-off analyses).
 - **PR descriptions, patches, ad-hoc test scripts**: keep them in `trash/`, not
   `docs/`.
-- `docs/build/` is gitignored and reserved for generated output (e.g. Sphinx);
-  do not place hand-written notes there.
-- Write in clear Markdown; include links to source files/lines (e.g.
-  `[foo.py:42](src/foo.py)`) where helpful.
+- Git ignores `docs/build/`, which holds generated output (e.g. Sphinx). Do not
+  place a hand-written note there.
+- Write clear Markdown. Include links to source files and lines (e.g.
+  `[foo.py:42](src/foo.py)`) where they help.
 
 ## Scratch / throwaway work
 
-Two flavors of "don't commit this yet" coexist in the repo — pick the one that
-fits:
+The repo has two forms of "don't commit this yet". Pick the form that fits:
 
-- **`999-*` prefix** — for _in-progress work that still uses the project's
-  normal infrastructure_ (Hydra configs, `scripts/python/` layout, `docs/`
-  Markdown). The `.gitignore` excludes:
+- **`999-*` prefix** — use it for _in-progress work that still uses the
+  project's normal infrastructure_ (Hydra configs, `scripts/python/` layout,
+  `docs/` Markdown). The `.gitignore` file excludes:
 
-  - `scripts/python/999-*.py` — exploratory Hydra+Fire scripts (use the
-    `new-script` skill's normal scaffold; just pick `999-` as the prefix).
-  - `docs/999-*.md` — temporary notes / drafts that may later be promoted to a
-    real `NNN-*.md` doc. Use this when you want the script or doc to _look like_
-    a regular project artifact — paired config, proper imports, etc. — but
-    aren't ready to commit it.
+  - `scripts/python/999-*.py` — exploratory Hydra+Fire scripts (use the normal
+    scaffold of the `new-script` skill, and pick `999-` as the prefix).
+  - `docs/999-*.md` — temporary notes or drafts. You can promote them later to a
+    real `NNN-*.md` doc. Use this prefix when the script or doc must _look like_
+    a regular project artifact — paired config, proper imports, etc. — but you
+    are not ready to commit it.
 
-- **`trash/` directory** — gitignored sink for _anything that doesn't fit the
+- **`trash/` directory** — a gitignored place for _anything that doesn't fit the
   project's structure at all_: `tmp_*.py`, `t.py`, `check_*.py`, `*.patch`,
   draft `pr-desc.md`, downloaded artifacts, one-off diagnostic snippets, etc.
   - Do **not** import from `trash/` in committed code.
   - Do not put long-lived notes here — promote them to `docs/` instead.
 
-When promoting: rename `999-<slug>.{py,md}` → `<next-free-NNN>-<slug>.{py,md}`
-(and pair the script with a matching renamed config). For `trash/` content worth
-keeping, move it into the proper directory and clean it up first — don't just
-`git add` from `trash/`.
+To promote a file, rename `999-<slug>.{py,md}` →
+`<next-free-NNN>-<slug>.{py,md}`. Also rename the paired config to match the
+script. To keep content from `trash/`, move it into the proper directory and
+clean it up first. Do not run `git add` directly from `trash/`.
 
 ## Environment variables (`.env` / `.env.example`)
 
-- `.env.example` is the committed source of truth for the env surface
-  (placeholder values; comments always on their own lines —
-  `scripts/bash/notify.sh` shell-sources the file).
-- `.env` is **gitignored** — never commit secrets.
-- When adding a new env var that the code reads, also add it to `.env.example`
-  with a sensible default or empty placeholder.
+- `.env.example` is the committed source of truth for the env surface. It holds
+  placeholder values. Keep every comment on its own line, because
+  `scripts/bash/notify.sh` shell-sources the file.
+- `.env` is **gitignored**. Never commit a secret.
+- When you add a new env var that the code reads, also add it to `.env.example`.
+  Give it a sensible default or an empty placeholder.
 
-The full read surface, grouped as in `.env.example`:
+The full read surface, in the groups from `.env.example`:
 
-- **Logging** (consumed by `LoggerConfig`; `JSON_LOGS`/`COLORIZE` also switch
+- **Logging** (`LoggerConfig` reads these; `JSON_LOGS`/`COLORIZE` also switch
   `helper.display` to plain-text output): `ENV_MODE`, `LOG_LEVEL`, `JSON_LOGS`,
   `COLORIZE`; optional: `FORCE_RICH` (force rich output when stdout is not a
   TTY).
 - **Hugging Face**: `HF_TOKEN` (write scope for `intern.py publish`; hf_jobs
   lane secret), `HF_USER` (publish repo-id default), `HF_HUB_ENABLE_HF_TRANSFER`
-  (hf-transfer is installed but inert without it); optional: `HF_HOME`,
-  `HF_HUB_OFFLINE`, `HF_DATASETS_CACHE`, `HF_ENDPOINT` (private Hub mirror).
-- **GitHub**: `GITHUB_TOKEN` (`gh search` in literature-recipe-research —
-  unauthenticated gh search refuses; `GH_TOKEN` takes precedence when set; gh
-  does not auto-load `.env`, so export it or `gh auth login`).
+  (the repo installs hf-transfer, but it stays inert without this var);
+  optional: `HF_HOME`, `HF_HUB_OFFLINE`, `HF_DATASETS_CACHE`, `HF_ENDPOINT`
+  (private Hub mirror).
+- **GitHub**: `GITHUB_TOKEN` (`gh search` in literature-recipe-research needs
+  it; an unauthenticated `gh search` refuses; `GH_TOKEN` takes precedence when
+  you set it; gh does not auto-load `.env`, so export it or run
+  `gh auth login`).
 - **Training**: `SMOKE_TEST` (forces the smoke gate in the training adapters),
   `TOKENIZERS_PARALLELISM`; optional: `PYTORCH_ENABLE_MPS_FALLBACK`,
   `CUDA_VISIBLE_DEVICES`.
 - **trackio**: optional `TRACKIO_PROJECT` (project name; defaults to
   `project_name` from `configs/main.yaml` via config interpolation),
-  `TRACKIO_DIR` (local metrics DB location, defaults to `$HF_HOME/trackio`); HF
-  Space sync is configured via `tracking.space_id` in configs (created private),
-  not env.
+  `TRACKIO_DIR` (local metrics DB location, defaults to `$HF_HOME/trackio`). You
+  configure the HF Space sync with `tracking.space_id` in the configs (created
+  private), not with an env var.
 - **wandb**: `WANDB_API_KEY` (only when `tracking=wandb`); optional:
   `WANDB_PROJECT` (project name; defaults to `project_name` from
   `configs/main.yaml` via config interpolation), `WANDB_MODE`, `WANDB_DIR`.
@@ -332,73 +374,75 @@ Invoke via `Skill` (or `/name`) when the request matches.
 
 ## Engineering discipline
 
-Behavioral rules that reduce common agent coding mistakes. They bias toward
-caution over speed — for trivial tasks, use judgment.
+These behavioral rules reduce common agent coding mistakes. They favor caution
+over speed. For a trivial task, use your judgment.
 
-- **Think before coding.** State assumptions explicitly; if multiple
-  interpretations exist, present them — never pick one silently. Research first
-  (never ask what the repo can answer), but when something is still unclear
-  after looking: stop, name what's confusing, and ask (interactive) — or record
-  the assumption and fire `notify.sh approval_required` (headless). Never guess
-  silently.
-- **Simplicity first.** Minimum code that solves the problem: no features beyond
-  what was asked, no abstractions for single-use code, no speculative
-  configurability, no error handling for impossible scenarios. Infrastructure
-  earns its place by being used. Test: "would a senior engineer call this
-  overcomplicated?" — if yes, simplify.
-- **Surgical changes.** Every changed line traces to the request. Don't
-  "improve" adjacent code, comments, or formatting; don't refactor what isn't
-  broken. Remove imports/variables your own change orphaned; mention
-  pre-existing dead code, don't delete it unasked.
-- **Verifiable goals.** Turn the task into a checkable criterion before coding:
-  "fix the bug" → a test that reproduces it, then passes; "add validation" →
-  tests for the invalid inputs, then make them pass. Experiments already enforce
-  this (`mechanism` / `expected_delta` / `falsification` in plan.md); for code
-  changes, see "Finishing a task" below.
+- **Think before you code.** State each assumption explicitly. If the request
+  has more than one interpretation, present all of them — never pick one in
+  silence. Research first, and never ask what the repo can answer. If something
+  stays unclear after that research, stop and name it. Then ask the user
+  (interactive), or record the assumption and fire `notify.sh approval_required`
+  (headless). Never guess in silence.
+- **Simplicity first.** Write the minimum code that solves the problem. Add no
+  feature beyond the request, no abstraction for single-use code, no speculative
+  configurability, and no error handler for an impossible scenario.
+  Infrastructure earns its place only when the code uses it. Ask: "would a
+  senior engineer call this overcomplicated?" If the answer is yes, simplify.
+- **Surgical changes.** Every changed line traces to the request. Do not
+  "improve" adjacent code, comments, or formatting. Do not refactor code that is
+  not broken. Remove the imports and variables that your own change orphaned.
+  Report pre-existing dead code, and do not delete it unasked.
+- **Verifiable goals.** Turn the task into a checkable criterion before you
+  write code. For "fix the bug" → write a test that reproduces it, then passes.
+  For "add validation" → write tests for the invalid inputs, then make them
+  pass. The experiments already enforce this rule (`mechanism` /
+  `expected_delta` / `falsification` in plan.md). For a code change, see "Finish
+  a task" below.
 
-## Finishing a task (verify before reporting done)
+## Finish a task (verify before you report done)
 
-Always run an appropriate verification before declaring a task complete — don't
-rely on the diff "looking right." Pick the lightest command that exercises the
-change:
+Always run an appropriate verification before you declare a task complete. Do
+not rely on a diff that looks correct. Pick the lightest command that exercises
+the change:
 
-- **Code changes touching `src/` or `scripts/python/`** → `uv run pytest` (or a
+- **A code change in `src/` or `scripts/python/`** → `uv run pytest` (or a
   focused `uv run pytest tests/test_foo.py::test_bar` when the suite is slow).
 - **Style / formatting / import cleanup** → `uv run ruff check --fix .` and
   `uv run ruff format .`.
 - **Anything just before a commit** → `make pre_commit_run`.
 - **New runnable script** → execute it with a minimal config
-  (`uv run python scripts/python/<file>.py`) to confirm it boots, even if the
-  real workload is heavy.
+  (`uv run python scripts/python/<file>.py`) to confirm that it starts, even
+  when the real workload is heavy.
 
-If verification can't be run (missing dataset, GPU-only code, external service),
-say so explicitly rather than implying success. Don't suppress errors to make a
-command pass — fix the root cause.
+If you cannot run a verification (missing dataset, GPU-only code, external
+service), say so explicitly. Never imply success. Never suppress an error to
+make a command pass. Fix the root cause instead.
 
 ## Pre-commit hooks (what runs on commit)
 
 `pre-commit-hooks` basics, `ruff` (fix + format), `codespell`, `prettier`
 (md/yaml/toml/json/sh — README excluded), `nbqa-ruff`, `nbstripout`, `uv-lock`.
-Do not bypass with `--no-verify` unless explicitly asked.
+Do not bypass the hooks with `--no-verify` unless the user explicitly asks.
 
 ## Working tips for Claude
 
-- Default to editing existing files; the layout above is intentional.
-- When writing new modules, mirror the patterns in
+- Edit an existing file by default. The layout above is intentional.
+- When you write a new module, mirror the patterns in
   `src/helper/logging/__init__.py` (Google-style docstrings, type hints,
   singletons where appropriate).
-- Place runnable entrypoints under `scripts/python/` (which is exempt from
-  `E402`). For a Hydra entrypoint, decorate `main` with `@hydra.main(...)` and
-  call `main()` directly under `if __name__ == "__main__":` — don't wrap it in
-  `fire.Fire(...)` (both parse `sys.argv` and conflict). Use `fire.Fire(...)`
-  only for multi-command CLIs that have no `@hydra.main` decorator.
-- Don't add a `logging` config — reuse `LoggerConfig` from `src/helper/logging`.
-- Don't introduce alternate config systems (argparse, click, dynaconf) — use
-  Hydra + Fire as already chosen.
-- Don't create new top-level directories without a clear reason; extend
-  `src/<package>/...`.
-- When unsure about repo-specific intent (TODOs in README, empty `scripts/`),
-  ask before scaffolding large structures.
-- For substantive analyses, plans, or research summaries: save them to `docs/`
-  using the `NNN-kebab-case.md` naming (see "Docs conventions") rather than only
-  replying in chat. Use `trash/` for throwaway scripts and patches.
+- Place a runnable entrypoint under `scripts/python/`, which is exempt from
+  `E402`. For a Hydra entrypoint, decorate `main` with `@hydra.main(...)`. Call
+  `main()` directly under `if __name__ == "__main__":`. Do not wrap it in
+  `fire.Fire(...)`, because both parse `sys.argv` and conflict. Use
+  `fire.Fire(...)` only for a multi-command CLI that has no `@hydra.main`
+  decorator.
+- Do not add a `logging` config. Reuse `LoggerConfig` from `src/helper/logging`.
+- Do not introduce an alternate config system (argparse, click, dynaconf). Use
+  Hydra + Fire, which this repo already chose.
+- Do not create a new top-level directory without a clear reason. Extend
+  `src/<package>/...` instead.
+- When you are unsure about repo-specific intent (TODOs in README, empty
+  `scripts/`), ask before you scaffold a large structure.
+- Save a substantive analysis, plan, or research summary to `docs/` with the
+  `NNN-kebab-case.md` naming (see "Docs conventions"). Do not reply in the chat
+  only. Use `trash/` for a throwaway script or patch.
