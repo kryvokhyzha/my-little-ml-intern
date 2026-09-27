@@ -1,0 +1,36 @@
+# Asynchronous on-policy distillation (trl.experimental.async_distillation): the student
+# generates on a vLLM server while the trainer trains; each teacher is a separate HTTP
+# vLLM server that returns its top-k logprobs for the student's tokens. Several teachers
+# (multi-teacher on-policy distillation) route rows by a `teacher_id` column.
+# GPU-ONLY lane (CUDA, flash-attn3, `vllm` + `kernels` on the GPU box). Start the servers:
+#   student: see trl_async_grpo.yaml (port 8000)
+#   teacher: vllm serve <teacher> --host 127.0.0.1 --port 8001 --logprobs-mode processed_logprobs --max-logprobs -1
+# With max_steps: -1 the trainer stops after num_train_epochs x len(data.train) prompts (TRL >= 1.13)
+# and max_steps is only a ceiling, so the LR is constant; set max_steps > 0 for a decaying schedule.
+# Teachers must share the student tokenizer. No eval_dataset, no peft.
+kind: trl_async_distill
+planned_tokens: null
+peft: null
+args:
+  _target_: trl.experimental.async_distillation.AsyncDistillationConfig
+  output_dir: ${experiment_dir}/ckpts
+  vllm_server_base_url: http://localhost:8000
+  teacher_server_urls:
+    default: http://localhost:8001
+  dtype: float32 # TRL default (the precision TRL measured); must equal `vllm serve --dtype`
+  beta: 0.0 # 0.0 = forward KL (TRL default here), 1.0 = reverse KL
+  teacher_top_k: 8
+  max_completion_length: 1024
+  temperature: 1.0
+  max_staleness: 4
+  weight_sync_steps: 1
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 8
+  gradient_accumulation_steps: 4
+  learning_rate: 1.0e-6
+  lr_scheduler_type: constant
+  lr_scheduler_kwargs: null
+  logging_steps: 1
+  save_steps: 200
+  seed: ${seed}

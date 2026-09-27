@@ -1,0 +1,30 @@
+# SSD — Simple Self-Distillation (trl.experimental.ssd; Zhang et al. 2026). The model samples
+# one completion per prompt at the training temperature, empty or stub outputs are dropped,
+# and the model trains with cross-entropy on its own RAW samples. No teacher, no verifier —
+# the unverified cousin of 004's verify-first STaR loop. Needs a `prompt` column.
+kind: trl_ssd
+planned_tokens: null
+peft: null
+args:
+  _target_: trl.experimental.ssd.SSDConfig
+  output_dir: ${experiment_dir}/ckpts
+  # Training-time sampling (T_train and truncation) — the paper's values per TRL's docs. The
+  # evaluation temperature is set independently at inference (T_eff = T_train x T_eval).
+  temperature: 0.6
+  top_k: 20
+  max_completion_length: 256
+  # filter_empty drops empty completions AND any single-line completion under 10 characters (a
+  # "stub"). For short-answer tasks (arithmetic, labels) that drops everything: set it false.
+  filter_empty: true
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 5.0e-6 # TRL docs recipe (TRL's config default is 5e-5)
+  lr_scheduler_type: linear
+  lr_scheduler_kwargs: null
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

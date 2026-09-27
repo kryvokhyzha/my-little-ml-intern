@@ -1,4 +1,5 @@
-# QLoRA variant: 4-bit base load; requires bitsandbytes (`uv sync --group gpu`, CUDA-only).
+# QLoRA variant: 4-bit base load; requires bitsandbytes (`uv sync --group gpu`). Real runs need CUDA;
+# bitsandbytes >= 0.50 also runs the smoke test on CPU.
 main:
   _target_: transformers.AutoModelForCausalLM.from_pretrained
   _args_: ["google/gemma-4-E2B-it"]

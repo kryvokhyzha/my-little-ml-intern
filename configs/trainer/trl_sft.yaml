@@ -18,7 +18,7 @@ args:
   #   cosine_with_restarts -> {num_cycles: 2}
   #   cosine_with_min_lr   -> {min_lr_rate: 0.1}
   lr_scheduler_kwargs: null
-  warmup_ratio: 0.03
+  warmup_steps: 0.03 # a float < 1 is a ratio of the total steps (warmup_ratio was removed in transformers 5.15.0)
   logging_steps: 1
   eval_strategy: "no"
   save_steps: 200

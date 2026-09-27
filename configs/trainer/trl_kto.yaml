@@ -3,6 +3,7 @@
 # needed, so real-world thumbs-up/down data works directly. Uses a reference model
 # like DPO (optional `model.ref` node; TRL clones one when absent). Stable in TRL 1.8.
 # args is an instantiate node: any KTOConfig / TrainingArguments field is settable here.
+# TRL >= 1.9 drops rows whose prompt alone reaches max_length.
 kind: trl_kto
 planned_tokens: null
 peft: null

@@ -1,0 +1,45 @@
+# Asynchronous GRPO (trl.experimental.async_grpo): a vLLM server generates rollouts while
+# the trainer trains; new weights go to the server over NCCL every weight_sync_steps.
+# GPU-ONLY lane: it needs CUDA, flash-attn3 kernels, the `kernels` package (the `async` group),
+# the `vllm` package (not in the lockfile — install it on the GPU box), and a running server:
+#   VLLM_SERVER_DEV_MODE=1 VLLM_WORKER_MULTIPROC_METHOD=spawn vllm serve <model> \
+#     --host 127.0.0.1 --dtype float32 --weight-transfer-config '{"backend":"nccl"}' \
+#     --logprobs-mode processed_logprobs --max-logprobs -1
+# Install on the GPU box: vLLM 0.29.0 as the +cu129 wheel from the vLLM release page
+# (vLLM pins torch exactly; the PyPI wheels are CUDA 13 builds, and this repo's torch is 2.13+cu129)
+# plus `uv sync --group async` (kernels). The train-llm async-lanes reference has the exact commands.
+# The trainer loads the model by name (model.main._args_[0]); there is no eval_dataset and no
+# reference model (the logged `kl` is against the rollout policy). LoRA works since TRL 1.14
+# (start the server with --enable-lora --max-lora-rank <r> --max-loras <max_staleness+2>).
+kind: trl_async_grpo
+planned_tokens: null
+peft: null
+reward_funcs: []
+environment_factory: null
+tools: []
+env_spec: null
+args:
+  _target_: trl.experimental.async_grpo.AsyncGRPOConfig
+  output_dir: ${experiment_dir}/ckpts
+  vllm_server_base_url: http://localhost:8000
+  dtype: float32 # TRL default (the precision TRL measured); must equal `vllm serve --dtype`
+  num_generations: 8
+  max_completion_length: 1024
+  # Rollout sampling policy — the exploration knobs (TRL defaults shown), as in trl_grpo.yaml.
+  temperature: 1.0
+  top_p: 1.0
+  # Multi-turn rows fork into a new row when the re-tokenized history drifts more than this.
+  fork_threshold_tokens: 1024
+  # Off-policy tolerance: rollouts older than max_staleness weight versions are dropped.
+  max_staleness: 4
+  weight_sync_steps: 1
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 8
+  gradient_accumulation_steps: 4
+  learning_rate: 1.0e-6
+  lr_scheduler_type: constant
+  lr_scheduler_kwargs: null
+  logging_steps: 1
+  save_steps: 200
+  seed: ${seed}

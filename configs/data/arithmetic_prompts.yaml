@@ -1,0 +1,13 @@
+# Verifiable 2-digit-addition prompts, built in memory by data.self_distill.build_prompt_dataset
+# (the same task pool and train/eval split as 004-self-distill). Columns: prompt (one user
+# message), answer (int — reward functions receive it), privileged_context (the solution —
+# the SDFT self-teacher sees it; trl_sdpo must keep include_environment_feedback: false here,
+# because this column holds the answer, not feedback). Feeds trl_grpo / trl_rloo / trl_sdpo
+# (reward_funcs: [data.self_distill:arithmetic_reward]), trl_ssd, trl_sdft, trl_distill, and the
+# async lanes.
+train:
+  _target_: data.self_distill.build_prompt_dataset
+  split: train
+eval:
+  _target_: data.self_distill.build_prompt_dataset
+  split: eval

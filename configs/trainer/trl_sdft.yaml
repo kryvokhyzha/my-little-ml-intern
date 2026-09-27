@@ -1,0 +1,37 @@
+# SDFT — Self-Distillation Fine-Tuning (trl.experimental.sdft; Shenfeld et al. 2026). No
+# external teacher: the teacher is the model itself, conditioned on the prompt PLUS a
+# privileged context (a demonstration, a solution, a document). The student sees only the
+# prompt and learns to match the informed self on its own samples — new knowledge without
+# the forgetting that plain SFT causes. Needs `prompt` + `privileged_context` columns.
+kind: trl_sdft
+planned_tokens: null
+peft: null
+args:
+  _target_: trl.experimental.sdft.SDFTConfig
+  output_dir: ${experiment_dir}/ckpts
+  # teacher_model_kind: base = the frozen initial model, ema = an averaged copy, live = the
+  # current student. The teacher prompt is teacher_prompt_template (TRL default:
+  # "{prompt}\n\n{privileged_context}").
+  teacher_model_kind: base
+  # true samples from the context-conditioned prompt (better rollouts, less on-policy); TRL's
+  # recipe uses it together with teacher_model_kind: ema.
+  generate_from_teacher: false
+  distillation_mode: topk_logits
+  distillation_topk: 100
+  # generation_batch_size (= per_device_train_batch_size x steps_per_generation) must be a
+  # multiple of num_generations.
+  num_generations: 4
+  max_completion_length: 256
+  temperature: 1.0
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-5 # TRL docs recipe (TRL's config default is 5e-5)
+  lr_scheduler_type: linear
+  lr_scheduler_kwargs: null
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

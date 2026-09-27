@@ -31,7 +31,7 @@ trainer:
     completion_only_loss: true
     # optim: paged_adamw_8bit, bf16, gradient_checkpointing come from trainer=trl_sft_qlora
     lr_scheduler_type: cosine
-    warmup_ratio: 0.03
+    warmup_steps: 0.03 # ratio of total steps; same value the removed warmup_ratio set
     eval_strategy: steps
     eval_steps: 50
     save_strategy: steps

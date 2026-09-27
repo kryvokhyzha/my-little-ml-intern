@@ -1,0 +1,44 @@
+# On-policy distillation with the stable DistillationTrainer (TRL >= 1.10, the successor of
+# GKD). Every step is on-policy: the student samples a completion and the LIVE teacher grades
+# each token with the generalized JSD. Needs a `model.teacher` node that shares the student
+# vocabulary (TRL checks vocab_size) and a `prompt` column (conversational or standard).
+# There is no lmbda: TRL 1.9 removed the off-policy mix. For hard-label imitation of fixed
+# teacher text, use trl_sft; for a teacher with another tokenizer, use trl_gold.
+# TRL >= 1.10 does not truncate prompts on this lane: trim over-long prompt rows in data prep;
+# only max_completion_length bounds the sequence. A trl_gkd -> trl_distill comparison must pin
+# beta to the GKD value (0.5 there, 1.0 here) and map max_new_tokens -> max_completion_length.
+# The comparison also needs lmbda: 1.0 and temperature: 1.0 on the GKD side. A GKD run at other
+# values (for example lmbda 0.5, temperature 0.9) has no matching trl_distill setting.
+kind: trl_distill
+planned_tokens: null
+peft: null
+# Tools (dotted paths) for on-policy AGENT distillation: the student calls them, tool-result
+# tokens are masked, and the teacher grades the student's own tokens (TRL >= 1.11). Needs a
+# tool-calling chat template (see train-llm references/environments.md).
+tools: []
+# args is an instantiate node: any DistillationConfig / TrainingArguments field is settable here.
+args:
+  _target_: trl.DistillationConfig
+  output_dir: ${experiment_dir}/ckpts
+  # beta interpolates the generalized JSD: 0.0 = forward KL, 0.5 = symmetric JSD,
+  # 1.0 = reverse KL (TRL default; mode-seeking — the usual pick when student << teacher).
+  beta: 1.0
+  temperature: 1.0 # used for the student samples AND the loss
+  # TRL 1.10 changed the defaults: top_p 0.95 -> 1.0, disable_dropout true -> false.
+  # trl_gkd forces top_p 1.0 during sampling since TRL 1.9, and keeps disable_dropout true.
+  # Pinning both keys here keeps a gkd-vs-distill path a one-variable comparison.
+  top_p: 1.0
+  disable_dropout: true
+  max_completion_length: 256
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 2.0e-5 # TRL docs recipe for full fine-tuning; 2e-4 for a LoRA student
+  lr_scheduler_type: cosine
+  lr_scheduler_kwargs: null
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

@@ -1,3 +1,5 @@
+# TRL >= 1.9 drops rows whose prompt alone reaches max_length (truncation_mode keep_start),
+# so long-prompt data can consume fewer tokens than planned.
 kind: trl_dpo
 planned_tokens: null
 peft: null

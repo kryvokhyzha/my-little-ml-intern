@@ -1,0 +1,35 @@
+# GOLD (trl.experimental.gold): GKD-style on-policy distillation that also works ACROSS
+# tokenizers. With use_uld_loss=true the Universal Logit Distillation loss compares sorted
+# probability vectors and merges token probabilities across the two tokenizations, so the
+# teacher can come from another model family. Needs a `model.teacher` node and a `messages`
+# column (or `prompt`+`completion`). Same-family pairs are cheaper on trl_distill.
+kind: trl_gold
+planned_tokens: null
+peft: null
+args:
+  _target_: trl.experimental.gold.GOLDConfig
+  output_dir: ${experiment_dir}/ckpts
+  # lmbda = fraction of steps on student samples; beta = JSD interpolation (as in trl_gkd).
+  lmbda: 0.5
+  beta: 0.5
+  temperature: 0.9
+  max_completion_length: 128
+  # Cross-tokenizer mode: set use_uld_loss=true AND teacher_tokenizer_name_or_path to the
+  # teacher repo. Leave both unset for a teacher that shares the student tokenizer.
+  use_uld_loss: false
+  teacher_tokenizer_name_or_path: null
+  # Set false when the student or the teacher tokenizer is SentencePiece (Gemma 4) — TRL >= 1.14.
+  use_extended_uld: true
+  top_p: 0.95 # TRL default for GOLD; trl_gkd samples at 1.0 — pin 1.0 to compare the two
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 2
+  gradient_accumulation_steps: 8
+  learning_rate: 2.0e-5
+  lr_scheduler_type: cosine
+  lr_scheduler_kwargs: null
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

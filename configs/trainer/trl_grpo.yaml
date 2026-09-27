@@ -2,8 +2,21 @@ kind: trl_grpo
 planned_tokens: null
 peft: null
 # Dotted import paths ('package.module:function') resolved via importlib at run time;
-# each callable must tolerate malformed completions (return the floor reward, never raise).
+# each callable must tolerate malformed completions (return the floor reward, never raise) and
+# return exactly one float (or None) per completion — TRL >= 1.10 raises otherwise.
 reward_funcs: []
+# Multi-turn tool environments (see trl_grpo_env.yaml and train-llm references/environments.md).
+# environment_factory: dotted path to a class TRL instantiates once per concurrent rollout;
+# its public methods become tools and its optional get_reward() becomes a reward source.
+environment_factory: null
+# tools: dotted paths to standalone tool functions (Google-style docstrings give the schema).
+tools: []
+# env_spec: instantiate node for a packaged environment (trl.experimental.harbor.HarborSpec,
+# trl.experimental.openreward.OpenRewardSpec) — it supplies the dataset, the environment,
+# and the reward functions; set data.train to null when you use it.
+# data.train: null with a plain environment_factory works only when its reset() returns the
+# prompt text AND trainer.args.max_steps > 0 (TRL builds placeholder prompts).
+env_spec: null
 args:
   _target_: trl.GRPOConfig
   output_dir: ${experiment_dir}/ckpts
@@ -17,6 +30,8 @@ args:
   temperature: 1.0
   top_p: 1.0
   learning_rate: 1.0e-6
+  # beta > 0 adds a KL penalty; since TRL 1.10 it uses the bias-corrected (importance-weighted)
+  # KL gradient — add use_bias_correction_kl: false to reproduce TRL <= 1.9.
   beta: 0.0
   lr_scheduler_type: linear # any transformers SchedulerType; `constant` is common for RL
   lr_scheduler_kwargs: null

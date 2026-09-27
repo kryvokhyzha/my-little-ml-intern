@@ -1,0 +1,7 @@
+# Guess-the-number rollouts for trl_grpo_env: conversational prompts plus the secret/low/high
+# columns that GuessNumberEnv.reset() consumes (src/training/envs/guess_number.py).
+train:
+  _target_: training.envs.guess_number.build_dataset
+  n: 256
+  split: train
+eval: null
