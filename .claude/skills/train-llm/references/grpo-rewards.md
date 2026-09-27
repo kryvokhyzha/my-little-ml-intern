@@ -10,6 +10,11 @@ the task definition. Read this file before you write any reward function for a
   (`package.module:function`). The lane resolves each one with importlib at run
   time. An empty list is a launch-blocking error ("GRPO needs at least one
   reward function").
+- For a parametrized reward, define a module-level `functools.partial` and
+  reference it by dotted path. Two partials of the same function share one
+  metric name, and TRL merges their `rewards/<name>` series. If you need a
+  separate series per variant, define a separate module-level `def` for each
+  variant.
 - TRL calls each function with the batch: the prompts, the completions, and the
   extra dataset columns as kwargs. TRL expects one float per completion.
 - **Floor-reward rule:** every reward function must tolerate a malformed
