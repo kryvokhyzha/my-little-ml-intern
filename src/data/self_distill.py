@@ -124,3 +124,45 @@ def success_rate(model: Any, tokenizer: Any, tasks: list[dict[str, Any]], *, max
         completion = generate_answers(model, tokenizer, task["question"], 1, max_new_tokens, temperature=0.0)[0]
         correct += bool(verify_completion(completion, task["answer"])["correct"])
     return correct / len(tasks)
+
+
+def build_prompt_dataset(split: str = "train", n_tasks: int = 300, seed: int = 42, eval_fraction: float = 0.2) -> Any:
+    """Conversational prompt dataset over the arithmetic pool — feeds the on-policy, RL, and self-distillation lanes.
+
+    Columns: ``prompt`` (one user message), ``answer`` (int; reward functions receive it as a
+    kwarg), and ``privileged_context`` (the worked solution; the SDFT teacher sees it, the
+    student does not). The split comes from :func:`build_arithmetic_tasks`, so the eval rows
+    never overlap the train rows.
+    """
+    from datasets import Dataset
+
+    tasks = [task for task in build_arithmetic_tasks(n_tasks, seed, eval_fraction) if task["split"] == split]
+    if not tasks:
+        raise ValueError(f"split must be 'train' or 'eval', got {split!r}")
+    return Dataset.from_list(
+        [
+            {
+                "prompt": [{"role": "user", "content": task["question"]}],
+                "answer": task["answer"],
+                "privileged_context": f"The correct answer is {task['answer']}.",
+            }
+            for task in tasks
+        ]
+    )
+
+
+def _completion_text(completion: Any) -> str:
+    if isinstance(completion, list):  # conversational: the last message carries the answer
+        return str(completion[-1].get("content", "")) if completion and isinstance(completion[-1], dict) else ""
+    return str(completion)
+
+
+def arithmetic_reward(completions: list[Any], answer: list[int], **kwargs: Any) -> list[float]:
+    """GRPO/RLOO/SDPO reward: 1.0 when the deterministic verifier accepts the completion, else 0.0.
+
+    Tolerates malformed completions (empty, no integer, odd message shapes): they score the floor.
+    """
+    return [
+        1.0 if verify_completion(_completion_text(completion), int(target))["correct"] else 0.0
+        for completion, target in zip(completions, answer, strict=True)
+    ]
