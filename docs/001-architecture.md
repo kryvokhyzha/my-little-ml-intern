@@ -39,6 +39,7 @@ experiments/NNN-<slug>/
 ├── plan.md          # hypotheses + solution paths (see plan contract)
 ├── budget.md        # caps + spent tally (parsed by intern.budget)
 ├── ledger.md        # per-path ledger table (managed by intern.ledger)
+├── journal.md       # append-only dated log: runs + gate outcomes (automatic), decisions/lessons (agent)
 ├── run.md           # exact commands run on compute (train/benchmark); ungated, filled by train-llm
 ├── data.md          # optional: dataset(s) used + how they were prepared (text + mermaid)
 ├── research.md      # optional recipe table from literature-recipe-research
@@ -184,6 +185,30 @@ kept → split; what was dropped and why), the **key knobs** (`max_length`,
 published model's `bundle/` by the publish gate. Datasets consumed unchanged
 need no data.md — the `configs/data/<name>.yaml` node is the whole story.
 
+### journal.md format
+
+The chronological lab notebook — what the per-path ledger and the final
+results.md cannot show: when each run started and on which library versions,
+what each gate said, and why the plan changed. Append-only, one entry per line,
+written through `intern.journal.Journal` (never by hand-editing old lines):
+
+```text
+# Journal — NNN-<slug>
+
+- 2026-09-27T10:40:12Z [run] trl_grpo run started (smoke=False) — python=3.13.12 torch=2.13.0 transformers=5.14.1 trl=1.14.0 git=56d67c6 device=1x NVIDIA L4
+- 2026-09-27T11:02:47Z [run] VERDICT: TRAIN_OK | final_train_loss=0.0123 | steps=300
+- 2026-09-27T11:03:10Z [gate] verify exit 0 — OVERALL: PASS (5 passed, 0 failed, 4 skipped)
+- 2026-09-27T11:05:00Z [decision] path-2: raise beta 0.0 -> 0.04 because kl_ref SKIPped
+```
+
+Kinds: `run` (training adapters: start with the env stamp, TRAIN_OK/TRAIN_FAIL
+outcome), `gate` (`intern.py` verify / budget init, can-launch, can-retry,
+record-\* / ledger upsert / publish), and the agent-written `decision`,
+`observation`, `lesson`, `blocker` (`intern.py journal ... add`). The entry line
+is greppable (`- <ts> [<kind>] [<path_id>: ]<text>`). Not a required file — the
+first gate or run creates it. Bundled by the publish gate; `status` shows the
+last 5 entries. An agent that resumes after a context reset reads it first.
+
 ### metrics.jsonl schema
 
 One JSON object per line, two record kinds:
@@ -205,7 +230,11 @@ Alert messages follow
 `<metric>=<value> at step <N> — <hypothesis>, try <action>`.
 
 **Run boundary:** adapters append a `run_start` event (fields: `task`,
-`run_name`, `smoke`) as their FIRST action, before anything that can crash.
+`run_name`, `smoke`, `env`) as their FIRST action, before anything that can
+crash. `env` is the provenance stamp from `training.runtime.env_stamp()`:
+`python` plus the installed `torch` / `transformers` / `trl` / `peft` /
+`datasets` / `accelerate` / `lightning` versions, `git` (short SHA, `+dirty`
+when tracked files differ from HEAD), and `device` — never a filesystem path.
 metrics.jsonl accumulates across paths/retries; verify scopes every check to
 records at or after the last `run_start` (whole file when none exists).
 `logs/stderr.log` is truncated per run by the adapter's tee.
@@ -219,7 +248,17 @@ VERDICT: loss_plausibility = PASS | value=2.31 | threshold=(1.04, 10.4) | final 
 VERDICT: eval_train_gap = SKIP | value=n/a | threshold=0.5 | no eval metrics logged
 ...
 OVERALL: PASS (5 passed, 0 failed, 2 skipped)
+ENV: python=3.13.12 torch=2.13.0 transformers=5.14.1 trl=1.14.0 git=56d67c6 device=cpu
+JUDGMENT: generation_quality = PASS | <one line against the training distribution>
+WAIVER: <check> = WAIVED | <benign mechanism + evidence> | <approved by>
+EVAL: <claim metric> = <value> | baseline <value> | <delta + noise estimate>
 ```
+
+`ENV:` is written by the gate from the last `run_start`'s `env` stamp — numbers
+are comparable only within one trainer version. `JUDGMENT:` / `WAIVER:` /
+`EVAL:` are agent-written annotations (verify-run skill); `write_report` keeps
+them on a rewrite (the publish gate re-runs verify). None of them changes the
+exit code: a waived FAIL still exits 1.
 
 ## src/intern API
 
@@ -248,13 +287,14 @@ Checks are task-aware via the `task` meta (`trl_sft` and unknown count as LM
 tasks) and scoped to the last `run_start`. Defaults (SKIP when inputs absent
 unless stated):
 
-1. `loss_plausibility` — LM tasks only (SKIP for `trl_dpo`/`trl_kto`/`trl_grpo`/
-   `trl_gkd`/`lightning` — their loss is not vocab cross-entropy): final train
-   loss ∈ (0.1·ln(V), ln(V)), V = `vocab_size`; loss < 1.0 is a red-flag FAIL
-   even when V is unknown. SKIPs (before the task/vocab logic) when the
-   `completion_only` meta is truthy — completion-only SFT loss is over
-   assistant-target tokens only, so the band and the <1.0 red-flag do not apply;
-   lean on `eval_train_gap`, `generation_sanity`, and held-out eval instead.
+1. `loss_plausibility` — LM tasks only (`trl_sft`, or no task meta); SKIP for
+   every other task — DPO/KTO, RL, distillation, and self-distillation losses
+   are not vocab cross-entropy: final train loss ∈ (0.1·ln(V), ln(V)), V =
+   `vocab_size`; loss < 1.0 is a red-flag FAIL even when V is unknown. SKIPs
+   (before the task/vocab logic) when the `completion_only` meta is truthy —
+   completion-only SFT loss is over assistant-target tokens only, so the band
+   and the <1.0 red-flag do not apply; lean on `eval_train_gap`,
+   `generation_sanity`, and held-out eval instead.
 2. `eval_train_gap` — |final eval loss − final train loss| < 0.5; eval loss is
    `loss(split=eval)`, `eval_loss`, or `val_loss` (Lightning).
 3. `data_consumption` — final `num_input_tokens_seen` ≥ 0.7 × `planned_tokens`.
@@ -268,18 +308,42 @@ unless stated):
    truthy — 4-bit storage breaks numel comparability.
 6. `generation_sanity` — `logs/samples.jsonl` mechanical proxies: unique-token
    ratio ≥ 0.3 (character-level fallback for non-space-delimited scripts), no
-   token > 50% of output, each sample ≥ 50 chars. File absent → FAIL for LM
-   tasks, SKIP otherwise; the agent must ALSO eyeball samples — mechanical pass
-   is necessary, not sufficient.
+   token > 50% of output, each sample ≥ 50 chars. The `completion` field (the
+   output without the prompt) must not be empty. A completion of ≥ 10 tokens
+   gets the same repetition proxies, so a long chat prompt in `text` cannot hide
+   a collapsed or looping answer. File absent → SKIP only for the no-sample
+   tasks (`trl_dpo`, `trl_kto`, `lightning`, `axolotl`), FAIL for every other
+   task — fail closed, so a new or unknown lane can never pass without evidence
+   about its outputs. The agent must ALSO eyeball samples — mechanical pass is
+   necessary, not sufficient.
 7. `reward_margin` (auto when DPO metrics present) — final
    `rewards/margins` > 0.
 8. `kl_ref` (auto when present) — mean KL over the current run finite and > 0.
-9. `reward_variance` (auto for GRPO runs) — current-run scope: when a
+9. `reward_variance` (auto for the RL lanes — GRPO, RLOO, async GRPO, and SDPO
+   through `self_distillation/reward_std`) — current-run scope: when a
    `reward_std` series exists, FAIL when every value == 0 ("no reward variance —
    the run optimized nothing"), PASS otherwise (value = final `reward_std`);
    else when a `reward` series exists, FAIL when its population std is 0
    (constant reward), PASS otherwise; SKIP when no GRPO reward metrics are
    logged.
+
+10. `completion_termination` (auto when `completions/clipped_ratio` is logged —
+    the on-policy lanes: GRPO, RLOO, distill, SDFT, SDPO, async) — FAIL when the
+    final ratio ≥ 0.95: almost every on-policy completion hit
+    `max_completion_length`, i.e. the policy stopped emitting EOS; SKIP
+    otherwise-absent.
+11. `data_consumption` detail: when `num_input_tokens_seen` is 0 or absent the
+    check reads TRL's `num_tokens` metric (GRPO / RLOO / distill count rollout
+    tokens there; `build_args` turns transformers' counter off on the
+    rollout-batch lanes, where it counts nothing and warns every step), and it
+    SKIPs for the lanes that count no tokens at all (`trl_sdft`, `trl_sdpo`,
+    `trl_ssd`, both async lanes) instead of a false FAIL.
+12. `training_signal` (auto when a lane activity metric is logged) — FAIL when
+    the metric is 0 at every step: `ssd/active_sample_ratio` (SSD's
+    `filter_empty` dropped every completion) or
+    `self_distillation/reprompt_sample_fraction` (no SDPO rollout reached
+    `success_reward_threshold`, so nothing was distilled). PASS when it is > 0
+    at some step, so a signal that dies mid-run still passes; SKIP otherwise.
 
 A low loss number is never evidence the model works.
 
@@ -346,6 +410,13 @@ A low loss number is never evidence the model works.
   a declared floor/pin version is younger than `min_age_days`; informational
   when a newer eligible version exists. Nonzero exit on violations.
 
+### journal.py
+
+- `KINDS = (run, gate, decision, observation, lesson, blocker)`.
+- `class Journal(path)` — `append(kind, text, path_id=None) -> str` (validates
+  the kind, flattens the text to one line, creates the `# Journal — <dir>`
+  header on first use), `entries() -> list[{ts, kind, path_id, text}]`.
+
 ### scaffold.py
 
 - `REQUIRED_FILES = (task.md, plan.md, budget.md, ledger.md, run.md)` — the
@@ -359,17 +430,21 @@ A low loss number is never evidence the model works.
 ## src/training API
 
 Layout: `training/trl/` is the TRL subpackage (`rewards.py`, `config.py`,
-`run.py`; `run_sft`/`run_dpo`/`run_grpo`/`run_gkd`/`run_kto` re-exported from
-`training.trl`). Framework-neutral plumbing is shared, not owned by a lane:
-`training/runtime.py` (stderr tee, `is_main_process`, `smoke_enabled`,
-`apply_tracking_env` — maps `tracking.project`/`tracking.group` onto
-`WANDB_PROJECT`/`WANDB_RUN_GROUP` for the wandb callback; trackio takes
-`TrainingArguments.project` via `build_args`), `training/models.py`
-(`load_model` with dtype/quant, `peft_config`), `training/sampling.py`
-(`SAMPLE_PROMPTS`, `write_samples`). Dataset loading lives in `data/`
-(`data.loading.load_split` / `validate_columns`,
-`data.synthetic.build_tiny_text_dataset`). The `lightning_adapter` imports the
-shared modules directly — never TRL internals.
+`run.py`; one `run_<kind without trl_>` per lane re-exported from
+`training.trl`: `run_sft`, `run_dpo`, `run_kto`, `run_grpo`, `run_rloo`,
+`run_gkd`, `run_distill`, `run_gold`, `run_sdft`, `run_sdpo`, `run_ssd`,
+`run_async_grpo`, `run_async_distill`). `training/envs/` holds example RL
+environments (`guess_number.GuessNumberEnv`). Framework-neutral plumbing is
+shared, not owned by a lane: `training/runtime.py` (stderr tee,
+`is_main_process`, `smoke_enabled`, `env_stamp`, `record_run_start` /
+`record_run_end` — the run_start event + journal entries, `apply_tracking_env` —
+maps `tracking.project`/`tracking.group` onto `WANDB_PROJECT`/`WANDB_RUN_GROUP`
+for the wandb callback; trackio takes `TrainingArguments.project` via
+`build_args`), `training/models.py` (`load_model` with dtype/quant,
+`peft_config`), `training/sampling.py` (`SAMPLE_PROMPTS`, `write_samples`).
+Dataset loading lives in `data/` (`data.loading.load_split` /
+`validate_columns`, `data.synthetic.build_tiny_text_dataset`). The
+`lightning_adapter` imports the shared modules directly — never TRL internals.
 
 - `training.trl.run_sft(cfg) -> dict` / `run_dpo(cfg) -> dict` — instantiate
   model/tokenizer from the `cfg.model` group (`training.models.load_model(cfg)`
@@ -385,11 +460,16 @@ shared modules directly — never TRL internals.
   build the trainer args by instantiating the `cfg.trainer.args` node
   (`_target_: trl.SFTConfig`/`DPOConfig`/`GRPOConfig`) via `build_args`, which
   layers the runtime values on top (`report_to` from `cfg.tracking.backend`,
-  run*name/project, hardware-aware bf16, smoke overrides, the alert-callback
-  flags), and the LoRA adapter by instantiating `cfg.trainer.peft` (`\_target*:
-  peft.LoraConfig`) via `peft_config`, attach `TRLAlertCallback`, set `report_to`from`cfg.tracking.backend`, `include_num_input_tokens_seen=True`, write `param_count`/`vocab_size`meta, tee stderr to`logs/stderr.log`, generate 3 sampled continuations (seeded sampling; probe prompts from `resolve_sample_prompts`— held-out`prompt`column for prompt/completion data, else defaults) to`logs/samples.jsonl`(one`{"prompt",
-  "text"}`object per line) after training, print one line:`VERDICT: TRAIN_OK |
-  final_train_loss=<v>`(or`TRAIN_FAIL | <cause>`).
+  `run_name`/`project`, hardware-aware bf16, smoke overrides, the alert-callback
+  flags), and the LoRA adapter by instantiating `cfg.trainer.peft`
+  (`_target_: peft.LoraConfig`) via `peft_config`. Then attach
+  `TRLAlertCallback`, set `include_num_input_tokens_seen` on the dict-batch
+  lanes, write the `param_count`/`vocab_size` meta, tee stderr to
+  `logs/stderr.log`, and train. After training, generate 3 sampled continuations
+  (seeded sampling; probe prompts from `resolve_sample_prompts`) to
+  `logs/samples.jsonl`: one `{"prompt", "text", "completion"}` object per line,
+  where `text` repeats the prompt. Print one line:
+  `VERDICT: TRAIN_OK | final_train_loss=<v>` (or `TRAIN_FAIL | <cause>`).
 - `training.trl.run_grpo(cfg) -> dict` — mirrors `run_sft`/`run_dpo` via
   `GRPOConfig`/`GRPOTrainer`. The dataset must contain a `prompt` column
   (ValueError naming the column contract otherwise). Reward functions come from
@@ -400,6 +480,40 @@ shared modules directly — never TRL internals.
   floor reward, never raise. `TRLAlertCallback` attached, meta written
   (`task=trl_grpo`), samples still generated post-run (the policy is an LM),
   same rank-zero + stderr-tee + `VERDICT` contract.
+- Environments (`run_grpo`, `run_async_grpo`): `trainer.environment_factory`
+  (dotted path to a class; TRL builds one instance per concurrent rollout,
+  exposes its public methods as tools, and adds its `get_reward()` as a reward
+  source), `trainer.tools` (dotted paths to standalone tool functions), or
+  `trainer.env_spec` (an instantiate node for a packaged spec such as
+  `trl.experimental.harbor.HarborSpec` / `openreward.OpenRewardSpec` that
+  supplies `train_dataset`, `environment_factory`, and `reward_funcs`; set
+  `data.train: null`). `trainer.reward_funcs` may be empty only when an
+  environment is configured. `data.train: null` passes `train_dataset=None` (TRL
+  then builds placeholder prompts, only with one `environment_factory` whose
+  `reset()` returns the prompt and `trainer.args.max_steps` > 0 — see
+  `train-llm` references/environments.md; environment-owned data). The model
+  needs a tool-calling chat template TRL can parse (`configs/model/qwen3_0_6b`).
+- `training.trl.run_rloo(cfg) -> dict` — `RLOOConfig`/`RLOOTrainer`: the GRPO
+  reward contract (non-empty `reward_funcs`) with the leave-one-out baseline; no
+  environments.
+- `training.trl.run_distill(cfg) -> dict` — stable `DistillationConfig`/
+  `DistillationTrainer` (TRL ≥ 1.10, GKD's successor): fully on-policy (no
+  `lmbda`), `model.teacher` required (same vocabulary — TRL checks
+  `vocab_size`), `prompt` column. `run_gold` — `trl.experimental.gold`: GKD
+  across tokenizers (`use_uld_loss` + `teacher_tokenizer_name_or_path`),
+  `messages` or `prompt`+`completion`.
+- Self-distillation (`trl.experimental`): `run_sdft` — the model conditioned on
+  a `privileged_context` column is its own teacher (`prompt` +
+  `privileged_context`); `run_sdpo` — reward functions select successful
+  rollouts and an EMA self distills them (`prompt`, non-empty `reward_funcs`);
+  `run_ssd` — SFT on the model's own raw samples (`prompt`).
+- Async lanes (`run_async_grpo`, `run_async_distill`;
+  `trl.experimental.async_grpo` / `async_distillation`): GPU + vLLM server only.
+  `_run_trl(model_as_id=True)` passes the `model.main._args_[0]` repo id (the
+  trainer loads the model itself), passes no `eval_dataset`, passes
+  `peft_config` only when set (async distill takes none), and writes the
+  `param_count` meta after trainer construction. Tested with a fake trainer — no
+  CPU path exists.
 - `training.trl.run_kto(cfg) -> dict` — unpaired preference alignment via
   `KTOConfig`/`KTOTrainer` (stable since TRL 1.8): per-example
   `prompt`+`completion`+`label` rows (`validate_columns` contract), reference
@@ -409,15 +523,16 @@ shared modules directly — never TRL internals.
   (loss_plausibility SKIPs) nor a generation task.
 - `training.trl.run_gkd(cfg) -> dict` — ON-policy distillation via
   `trl.experimental.gkd` `GKDConfig`/`GKDTrainer` (TRL 1.7 keeps GKD
-  experimental; the adapter silences the import warning). Requires a
-  `model.teacher` node (same shape as `model.main`; teacher and student must
-  share a tokenizer — `training.models.load_teacher_model` raises otherwise) and
-  a `messages`-format dataset (`validate_columns` task contract). Key args:
-  `lmbda` (fraction of steps on student-sampled sequences), `beta` (JSD
-  interpolation: 0 forward KL, 1 reverse KL), `temperature`, `max_new_tokens`.
-  OFF-policy distillation needs no lane — it is `run_sft` on teacher-generated
-  data. Worked pair: `002-distill-off-policy` / `003-distill-on-policy` (same
-  student + dataset, method is the single variable).
+  experimental; the adapter silences the import warning via
+  `TRL_EXPERIMENTAL_SILENCE`). Requires a `model.teacher` node (same shape as
+  `model.main`; teacher and student must share a tokenizer —
+  `training.models.load_teacher_model` raises otherwise) and a `messages`-format
+  dataset (`validate_columns` task contract). Key args: `lmbda` (fraction of
+  steps on student-sampled sequences), `beta` (JSD interpolation: 0 forward KL,
+  1 reverse KL), `temperature`, `max_new_tokens`. OFF-policy distillation needs
+  no lane — it is `run_sft` on teacher-generated data. Worked pair:
+  `002-distill-off-policy` / `003-distill-on-policy` (same student + dataset,
+  method is the single variable).
 - Quantization: a `quantization_config:` nested
   `_target_: transformers.BitsAndBytesConfig` node inside `model.main` (use a
   dedicated `<name>_4bit.yaml` model variant); requires the `gpu` dependency
@@ -436,8 +551,12 @@ shared modules directly — never TRL internals.
 - Smoke gate (all TRL lanes): when `cfg.smoke_test` or env `SMOKE_TEST=1` —
   `max_steps=1`, dataset sliced to ≤ 32 rows, no checkpoint save. Mandatory
   before any long run.
-- `lightning_adapter.run(cfg) -> dict` — `hydra.utils.instantiate`
-  module/datamodule and the `cfg.trainer.args` node
+- `build_args` refuses `gradient_checkpointing_kwargs` keys `offload` /
+  `every_n_layers` on `trl_grpo`, `trl_rloo`, `trl_dpo`, and `trl_kto`: TRL 1.14
+  re-enables checkpointing there with the raw kwargs, and transformers 5.17 then
+  crashes mid-run. The refusal fires before `train()`.
+- `lightning_adapter.run(cfg) -> dict` — `seed_everything(cfg.seed)`, then
+  `hydra.utils.instantiate` module/datamodule and the `cfg.trainer.args` node
   (`_target_: lightning.pytorch.Trainer`), injecting `logger`/`callbacks`/
   `enable_progress_bar` + the smoke overrides (the lightning-lane mirror of
   `build_args`).
@@ -463,24 +582,31 @@ uv run python scripts/python/intern.py ledger --experiment 001 show
 uv run python scripts/python/intern.py check --experiment 001
 uv run python scripts/python/intern.py status --experiment 001 [--json]
 uv run python scripts/python/intern.py publish --experiment 001 [--repo-id org/name] [--private true|false]
+uv run python scripts/python/intern.py journal --experiment 001 add --kind decision|observation|lesson|blocker --text "..." [--path-id path-1]
+uv run python scripts/python/intern.py journal --experiment 001 show [--kind decision] [--tail 20]
 uv run python scripts/python/intern.py deps [--min-age-days 7]
 ```
 
 Exit codes: 0 ok/allowed, 1 gate failed/denied, 2 usage or missing artifacts.
 These exits are the blocking mechanism — skills must stop on nonzero.
 
-`status` is the gates dashboard for one experiment: verify verdicts, budget
-caps/spent, and ledger rows; exit 0 (2 when the experiment is missing).
+`status` is the gates dashboard for one experiment: verify verdicts (+ ENV /
+WAIVER / EVAL / JUDGMENT lines), budget caps/spent, ledger rows, and the last 5
+journal entries; exit 0 (2 when the experiment is missing).
+
+Every state-changing gate command appends a `[gate]` journal entry: a full
+`verify` (not a scoped `--checks` run), `budget init` / `can-launch` /
+`can-retry` / `record-*`, `ledger upsert`, and `publish`.
 
 ### Publish gate
 
 `publish` is the BLOCKING publish gate. It re-runs verify (must exit 0) and
 requires results.md plus a ledger row with `status=passed` and `verify=pass`. It
 uploads the newest `ckpts/` model dir plus the reproducibility bundle —
-task/plan/budget/ledger/verify/results.md, `logs/samples.jsonl`,
-`configs/NNN-<slug>.yaml` — to the HF Hub with a model card generated from
-results.md, then appends `## Published` with the URL to results.md. Exit 0
-published, 1 gate refused, 2 missing artifacts/credentials.
+task/plan/budget/ledger/run/data/journal/verify/results.md (those present),
+`logs/samples.jsonl`, `configs/NNN-<slug>.yaml` — to the HF Hub with a model
+card generated from results.md, then appends `## Published` with the URL to
+results.md. Exit 0 published, 1 gate refused, 2 missing artifacts/credentials.
 
 API: `src/intern/publish.py` —
 `publish_run(experiment_dir, repo_id=None, private=True) -> int`. Repo id
@@ -559,8 +685,9 @@ checkpoint-dtype trap); `tokenizer:` (interpolates the model repo via
 Three optional model keys are omitted from the shipped configs and added per
 experiment only when needed: `ref:` (same shape as `main`, the DPO reference
 model — DPO experiments set it under `_self_` or a dedicated model file; absent
-elsewhere), `teacher:` (same shape as `main`, the live GKD teacher for
-`trainer=trl_gkd`; must share the student's tokenizer — see
+elsewhere), `teacher:` (same shape as `main`, the live teacher for
+`trainer=trl_gkd` / `trl_distill` / `trl_gold`; must share the student's
+tokenizer except on `trl_gold` with `use_uld_loss` — see
 `003-distill-on-policy`), and `target_params:` (an int enabling the opt-in
 `param_drift` verify check; absent means that check SKIPs).
 
@@ -575,13 +702,17 @@ adapter injects `for_eval=True` into `load_split` eval nodes (plain on-disk
 Dataset + eval = refused) and validates columns per task
 (`data.loading.validate_columns`: SFT needs `text`/`dataset_text_field`,
 `prompt`+`completion`, or `messages`; DPO needs `chosen`+`rejected`; GRPO needs
-`prompt`; GKD needs `messages`; KTO needs `prompt`+`completion`+`label`).
-Optional `sample_prompts` overrides the generation-sanity probe with fixed raw
-strings; omit it (shipped configs do) and
-`training.sampling.resolve_sample_prompts` picks the probe automatically —
-held-out prompts from the eval/train `prompt` column for prompt/completion data
-(rendered in the model's chat format, so `add_special_tokens=False`), else the
-built-in `SAMPLE_PROMPTS` for raw-text data.
+`prompt`, like RLOO / SDPO / SSD / distill / the async lanes; SDFT needs
+`prompt`+`privileged_context`; GKD needs `messages`; GOLD needs `messages` or
+`prompt`+`completion`; KTO needs `prompt`+`completion`+`label`). A
+conversational `prompt` column (a list of messages) is rendered through the
+tokenizer's chat template for the generation-sanity probe. Optional
+`sample_prompts` overrides the generation-sanity probe with fixed raw strings;
+omit it (shipped configs do) and `training.sampling.resolve_sample_prompts`
+picks the probe automatically — held-out prompts from the eval/train `prompt`
+column for prompt/completion data (rendered in the model's chat format, so
+`add_special_tokens=False`), else a `messages` column rendered up to its final
+assistant turn, else the built-in `SAMPLE_PROMPTS` for raw-text data.
 
 A data config that feeds a **prep** pipeline rather than a trainer uses a
 `source:` `_target_` node instead of `train:`/`eval:` — e.g.
@@ -595,26 +726,28 @@ model in `configs/model/*.yaml` (`main:` + `tokenizer:`, plus a
 dataset from a hard-coded id in code.
 
 The trainer group carries only run mechanics: `kind`, `planned_tokens`, `peft`,
-`reward_funcs` (GRPO), `args`. Like the model and data groups, `args` and `peft`
-are Hydra `_target_` instantiate nodes — `args._target_: trl.SFTConfig`
-(/`DPOConfig`/`GRPOConfig`, or `lightning.pytorch.Trainer` on the lightning
-lane), `peft._target_: peft.LoraConfig` — so every group declares the class it
-builds. `build_args`/`peft_config` (and the lightning adapter) instantiate them
-and inject the runtime values the config can't know (tracking wiring,
-hardware-aware bf16, smoke overrides, logger/callbacks/alert flags), which is
-the guardrail layer's value-add. Because `args` is an instantiate node, **any**
-field of the declared config class is settable from YAML with no code change —
-the shipped trainer files carry curated recipe defaults, not the exhaustive
-parameter surface. Presets stack by inheritance: `trl_sft` (full FT) →
-`trl_sft_lora` (LoRA) → `trl_sft_qlora` (paged optimizer + bf16; compose a
-`_4bit` model). Model identity/loading lives in `model`; dataset identity in
-`data`. `main.yaml` provides `seed`, `project_name`, `experiment_name`,
-`experiment_dir`, `smoke_test`. Tracking backend is never hardcoded in code —
-always `cfg.tracking.backend` (`trackio` primary, `wandb`, `none`).
-`tracking.group` (default null) clusters related runs on the dashboard — wandb
-via the `WANDB_RUN_GROUP` env var (both lanes); trackio via its
-`init(group=...)` kwarg on the Lightning lane only (the TRL lane's
-TrackioCallback hardcodes its init call and cannot forward it).
+`reward_funcs` (GRPO / RLOO / SDPO / async GRPO), `environment_factory` /
+`tools` / `env_spec` (the GRPO lanes), `args`. Like the model and data groups,
+`args` and `peft` are Hydra `_target_` instantiate nodes —
+`args._target_: trl.SFTConfig` (/`DPOConfig`/`GRPOConfig`, or
+`lightning.pytorch.Trainer` on the lightning lane),
+`peft._target_: peft.LoraConfig` — so every group declares the class it builds.
+`build_args`/`peft_config` (and the lightning adapter) instantiate them and
+inject the runtime values the config can't know (tracking wiring, hardware-aware
+bf16, smoke overrides, logger/callbacks/alert flags), which is the guardrail
+layer's value-add. Because `args` is an instantiate node, **any** field of the
+declared config class is settable from YAML with no code change — the shipped
+trainer files carry curated recipe defaults, not the exhaustive parameter
+surface. Presets stack by inheritance: `trl_sft` (full FT) → `trl_sft_lora`
+(LoRA) → `trl_sft_qlora` (paged optimizer + bf16; compose a `_4bit` model).
+Model identity/loading lives in `model`; dataset identity in `data`. `main.yaml`
+provides `seed`, `project_name`, `experiment_name`, `experiment_dir`,
+`smoke_test`. Tracking backend is never hardcoded in code — always
+`cfg.tracking.backend` (`trackio` primary, `wandb`, `none`). `tracking.group`
+(default null) clusters related runs on the dashboard — wandb via the
+`WANDB_RUN_GROUP` env var (both lanes); trackio via its `init(group=...)` kwarg
+on the Lightning lane only (the TRL lane's TrackioCallback hardcodes its init
+call and cannot forward it).
 
 ## Skill conventions
 
@@ -647,12 +780,16 @@ TrackioCallback hardcodes its init call and cannot forward it).
 
 v1 skills: `new-experiment`, `train-llm`, `verify-run`, `track-experiments`,
 `literature-recipe-research`, `autoresearch-loop`, `publish-model`,
-`distill-traces` (+ template's `new-doc`, `new-script`). Trainer lanes:
-`trl_sft`, `trl_dpo`, `trl_kto`, `trl_grpo`, `trl_gkd`, `lightning`, `axolotl`.
-Roadmap: `eval-harness`, OpenEnv env-GRPO (environment-based rollouts),
-`add-dependency`, `compare-experiments` CLI, `promote` CLI, `sync-agents-md`
-(AGENTS.md table generator + pre-commit staleness check). Dropped:
-`experiment-ledger` (superseded — within-experiment discipline lives in
+`distill-traces`, `writing-clearly-and-concisely` (+ template's `new-doc`,
+`new-script`). Trainer lanes: `trl_sft`, `trl_dpo`, `trl_kto`, `trl_grpo` (+
+environments), `trl_rloo`, `trl_gkd`, `trl_distill`, `trl_gold`, `trl_sdft`,
+`trl_sdpo`, `trl_ssd`, `trl_async_grpo`, `trl_async_distill`, `lightning`,
+`axolotl` (TRL 1.14; see [docs/010](010-trl-1-14-upgrade.md)). Roadmap:
+`eval-harness`, the OpenEnv loop-owning harness
+(`AsyncGRPOTrainer(rollout_worker=HarnessRolloutWorker)`), `add-dependency`,
+`compare-experiments` CLI, `promote` CLI, `sync-agents-md` (AGENTS.md table
+generator + pre-commit staleness check). Dropped: `experiment-ledger`
+(superseded — within-experiment discipline lives in
 train-llm/verify-run/track-experiments; cross-path orchestration is
 autoresearch-loop) and `notify-milestones` (covered by notify.sh and the skills
 that call it).
