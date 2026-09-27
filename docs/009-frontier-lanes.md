@@ -8,6 +8,40 @@ transformers 5.14.1. Claims here were adversarially re-checked against the
 installed packages; where a first draft was wrong, the corrected fact is what
 survived. -->
 
+> **Update — TRL 1.14 (2026-09-27, [docs/010](010-trl-1-14-upgrade.md)).** The
+> body below is the 1.8-era analysis; this box records what changed.
+>
+> - **White-box agent RL: unblocked and shipped** as `trainer=trl_grpo_env`. All
+>   three repo-side gaps closed: jmespath is not needed on transformers ≥ 5.13
+>   (we pin 5.17); `configs/model/qwen3_0_6b.yaml` is a tool-calling base TRL
+>   can parse; and the reward guard (now `reward_funcs_from_cfg`) accepts an
+>   environment's `get_reward()` as the reward source.
+>   `src/training/envs/guess_number.py` proves the plumbing offline. No
+>   experiment has run it on a real model yet — that is still experiment 005's
+>   job.
+> - **Loop-owning agent RL: released, not wired.** `openenv_harness` shipped in
+>   TRL 1.10, and `AsyncGRPOTrainer` takes LoRA since 1.14, so "full-parameter
+>   RL only" below no longer holds. It still needs `openenv`, vLLM 0.27.1–0.29
+>   (on torch 2.13), CUDA, and flash-attn3, with no local smoke.
+>   `trainer=trl_async_grpo` covers the trainer; the harness worker is wired per
+>   experiment (train-llm `references/environments.md`).
+> - **Section 3:** the unknown-`trainer.kind` finding is fixed —
+>   `generation_sanity` now fails closed. The multi-GPU `stderr.log` finding is
+>   still open.
+> - **Corrections from the 2026-09-27 commit-level audit.** Gemma 4's TRL 1.8
+>   blocker was `add_response_schema` ("Unrecognized chat template"), not
+>   `supports_tool_calling` as §2 says; TRL 1.9.1 fixed it, so Gemma 4 can run
+>   the environment lanes. The vLLM range for the async lanes is now 0.27.1–0.29
+>   on this repo's torch 2.13 (every vLLM release pins torch exactly), which
+>   supersedes the 0.22–0.23 note. TRL 1.11 moved the examples cited here to
+>   `examples/<name>/<name>.py` (e.g. `examples/async_grpo_opencode/`,
+>   `examples/sft_diffusion_gemma/`).
+> - **Block-diffusion SFT: half of the trigger is met.** transformers 5.15.0
+>   shipped PR 46572, so `DiffusionGemmaForBlockDiffusion` now supports gradient
+>   checkpointing. The model is still not registered under
+>   `AutoModelForCausalLM`, it still needs a custom collator, and the production
+>   checkpoint is still 26 B. No experiment needs it yet.
+
 Headline: **neither is a one-file lane addition, and both are further away than
 their announcement posts suggest** — but the distances differ. Agent RL splits
 into a white-box half that is _close_ (three concrete changes, none exotic) and
@@ -88,10 +122,10 @@ would fold both deltas into the same tensors.
 ### What adoption would cost here
 
 A new budget profile, a new model group on a different auto class, a custom
-collator, a `run_*` entry, deepspeed (sdist-only, needs a CUDA toolchain, and
-0.19.3 is younger than our 1-week floor), and a ZeRO-3 accelerate config. Two 80
-GB GPUs are not even enough for full fine-tuning: bf16 weights alone are ~51.6
-GB and AdamW state would add ~310 GB.
+collator, a `run_*` entry, deepspeed (sdist-only and needs a CUDA toolchain;
+0.19.7 is eligible, and TRL 1.14 needs ≥ 0.18.6), and a ZeRO-3 accelerate
+config. Two 80 GB GPUs are not even enough for full fine-tuning: bf16 weights
+alone are ~51.6 GB and AdamW state would add ~310 GB.
 
 **Trigger to re-evaluate:** a transformers release containing PR 46572 **and** a
 concrete experiment that needs block diffusion. Absent the second, this stays a
