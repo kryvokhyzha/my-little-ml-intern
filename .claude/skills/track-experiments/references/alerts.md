@@ -155,6 +155,7 @@ arrive ONLY in `on_evaluate`:
 from transformers import TrainerCallback
 from intern.callbacks import fire_alert
 
+
 class RewardCollapseAlert(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kwargs):
         margin = (logs or {}).get("rewards/margins")
@@ -170,13 +171,15 @@ Call a backend directly (in a custom loop outside the adapters only):
 
 ```python
 import trackio
+
 trackio.alert(
     title="grad_norm spike",
     text=f"grad_norm={gn:.1f} at step {step} — optimization unstable, try max_grad_norm=1.0",
-    level=trackio.AlertLevel.WARN,   # INFO | WARN | ERROR
+    level=trackio.AlertLevel.WARN,  # INFO | WARN | ERROR
 )
 
 import wandb
+
 wandb.alert(
     title="grad_norm spike",
     text=f"grad_norm={gn:.1f} at step {step} — optimization unstable, try max_grad_norm=1.0",
