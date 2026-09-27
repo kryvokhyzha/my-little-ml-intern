@@ -1,4 +1,5 @@
 import math
+import os
 import re
 import sys
 import types
@@ -190,14 +191,37 @@ def test_lightning_validation_end_writes_val_metrics_and_plateaus():
 
 
 def test_fire_alert_trackio(monkeypatch):
+    from trackio import AlertLevel
+
     captured = {}
-    monkeypatch.setitem(sys.modules, "trackio", types.SimpleNamespace(alert=lambda **kw: captured.update(kw)))
+    fake = types.SimpleNamespace(alert=lambda **kw: captured.update(kw), AlertLevel=AlertLevel)
+    monkeypatch.setitem(sys.modules, "trackio", fake)
     fire_alert("trackio", "ERROR", "loss=nan at step 3 — numerical instability, try skip step + halve lr")
     assert captured == {
         "title": "loss=nan at step 3",
         "text": "loss=nan at step 3 — numerical instability, try skip step + halve lr",
-        "level": "ERROR",
+        "level": AlertLevel.ERROR,
     }
+
+
+def test_fire_alert_reaches_the_real_trackio_store(tmp_path):
+    # Not mocked: with a plain-string level, trackio swallows the error and stores no alert.
+    import subprocess
+
+    script = (
+        "import sys; sys.path.insert(0, 'src')\n"
+        "import trackio\n"
+        "from trackio.sqlite_storage import SQLiteStorage\n"
+        "from intern.callbacks import fire_alert\n"
+        "trackio.init(project='alerts', name='r1')\n"
+        "fire_alert('trackio', 'ERROR', 'loss=nan at step 3 — numerical instability')\n"
+        "trackio.finish()\n"
+        "print([(a['level'], a['title']) for a in SQLiteStorage.get_alerts('alerts')])\n"
+    )
+    env = {**os.environ, "TRACKIO_DIR": str(tmp_path), "HF_HUB_OFFLINE": "1"}
+    out = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, timeout=120)
+    assert out.returncode == 0, out.stderr
+    assert "[('error', 'loss=nan at step 3')]" in out.stdout
 
 
 def test_grad_norm_nan_counts_as_instability():
@@ -222,13 +246,16 @@ def test_grad_norm_nan_streak_stops_training():
 def test_fire_alert_wandb(monkeypatch):
     captured = {}
 
-    def fake_alert(title, text):
-        captured["title"] = title
-        captured["text"] = text
+    def fake_alert(title, text, level):
+        captured.update(title=title, text=text, level=level)
 
     monkeypatch.setitem(sys.modules, "wandb", types.SimpleNamespace(alert=fake_alert))
     fire_alert("wandb", "WARN", "loss=9.8 at step 120 — lr likely too high, try lr*0.1")
-    assert captured == {"title": "WARN", "text": "loss=9.8 at step 120 — lr likely too high, try lr*0.1"}
+    assert captured == {
+        "title": "loss=9.8 at step 120",
+        "text": "loss=9.8 at step 120 — lr likely too high, try lr*0.1",
+        "level": "WARN",  # wandb defaults to INFO when no level is passed
+    }
 
 
 def test_fire_alert_trackio_falls_back_to_loguru(monkeypatch):

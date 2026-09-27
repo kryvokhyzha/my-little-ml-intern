@@ -14,6 +14,17 @@ Every lane shares the same artifact contract: checkpoints in
 there directly, plan how the artifacts come back before you launch (preflight.md
 line "Artifacts").
 
+## Every GPU box needs a C compiler (TRL ≥ 1.14)
+
+TRL ≥ 1.14 JIT-compiles a Triton launcher on the first CUDA use. This applies to
+DPO, KTO, GRPO, RLOO, SDFT, SDPO, and SSD, and to the SFT entropy metric. The
+box needs `gcc` or `clang` (or `$CC`) and the Python headers. Install `gcc` or
+`clang` on every box. A uv-managed Python already ships the Python headers. A
+system Python needs `python3-dev`. A CUDA runtime-only image fails the first
+training step with `Failed to find C compiler`. Check this on every lane above
+that provisions its own GPU image (`hf_jobs`, `modal`, `vast`), not only on a
+box you set up by hand.
+
 ## local (`configs/compute/local.yaml`) — v1
 
 Always probe the hardware first:
@@ -60,8 +71,8 @@ with `compute.host=... compute.user=... compute.remote_dir=...`. The sequence:
    ```
 
 2. **Sync the env**: `ssh <user>@<host> "cd <remote_dir> && uv sync"`. Use
-   `uv sync --group gpu` instead when the run uses QLoRA or bitsandbytes. The
-   `gpu` dependency group is CUDA-only, and you never install it locally.
+   `uv sync --group gpu` instead when the run uses QLoRA or bitsandbytes.
+   Install the `gpu` group locally only for a CPU QLoRA smoke test.
 3. **Probe**:
    `ssh <user>@<host> "cd <remote_dir> && bash scripts/bash/gpu_probe.sh"`.
 4. **Run the smoke test on the remote** (`smoke_test=true`). The local smoke run
@@ -135,6 +146,12 @@ hf jobs uv run --flavor a10g-small --timeout 3h --secrets HF_TOKEN <script-url-o
   `hub_private_repo=True`. A Trainer Hub push is public by default, and a
   job-side push bypasses the `intern.py publish` gate completely. The flag is
   therefore mandatory, not advisory.
+- Pin the library versions in the script's PEP 723 header to the `uv.lock`
+  versions (`trl==1.14.0`, `transformers==…`, `torch==…`, `peft==…`,
+  `accelerate==…`, `datasets==…`). The job imports TRL from that header, not
+  from the image, so an unpinned header installs the newest release and bypasses
+  the 1-week cooldown. `hf jobs run huggingface/trl:<X.Y.Z> -- …` pins the image
+  instead. Copy the pins into run.md.
 - Size `--timeout` to the run, plus a 30% buffer. The 3h default is a
   placeholder, not a decision.
 - After you submit the job, report the job id and the URL. Record the launch.
