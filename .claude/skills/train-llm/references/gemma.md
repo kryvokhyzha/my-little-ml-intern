@@ -119,7 +119,28 @@ with the token-level `trl_gkd` lane. This is the same pattern as the SmolLM2
 ladder in 002/003 (docs/008). Text-level distillation (the [skills]
 `distill_dataset.py` flow: the teacher generates the strings, then the student
 SFTs on them) is our `trl_sft`-on-teacher-data lane, or the distill-traces
-skill.
+skill. `trl_distill` (stable, fully on-policy) works on the same ladder. On
+`trl_gold` with `use_uld_loss: true`, set `use_extended_uld: false`: Gemma 4
+uses a SentencePiece tokenizer (TRL ≥ 1.14 rule).
+
+## Tool environments, loss numbers, and saved configs (TRL 1.14)
+
+- TRL ≥ 1.9.1 parses Gemma 4 tool calls, so a Gemma 4 model can run
+  `trl_grpo_env`. The template preserves prefixes, so no training template is
+  needed. On a template mismatch, GRPOTrainer raises "Unrecognized chat
+  template": set `tokenizer.response_template` by hand.
+- `trl_async_grpo` and `trl_async_distill` force
+  `attn_implementation="kernels-community/flash-attn3"`. FlashAttention-3 caps
+  the head dimension at 256. Gemma 4's global-attention layers use head_dim 512.
+  The async lanes are unverified for Gemma 4, and they likely fail at the first
+  forward pass.
+- TRL ≥ 1.11 applies Gemma 4's `final_logit_softcapping` in SFT's chunked loss;
+  TRL ≤ 1.10 dropped it (the loss used uncapped logits). Gemma 4 SFT losses from
+  before and after that boundary are not comparable (see 001's results.md).
+- transformers ≥ 5.15 saves a Gemma 4 config with `per_layer_config`.
+  transformers 5.14 cannot load that full checkpoint
+  (`AmbiguousGlobalPerLayerAttributeError`). Load it with transformers ≥ 5.15. A
+  LoRA adapter does not carry the base config, so it is not affected.
 
 ## After publish: export targets [skills]
 
