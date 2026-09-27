@@ -28,38 +28,37 @@ requires-python = ">=3.11,<3.14"
 dependencies = [
     # Core dependencies
     "rootutils >= 1.0.7",
-    "hydra-core == 1.3.3",
+    "hydra-core ~= 1.3.7",
     "hydra-colorlog == 1.2.0",
     "omegaconf ~= 2.3.1",
-    "python-dotenv ~= 1.2.2",
+    "python-dotenv ~= 1.2.3",
     "rich ~= 15.0.0",
-    "setuptools >= 75.6.0",
+    "setuptools >= 84.0.0",
     "loguru ~= 0.7.3",
     "fire ~= 0.7.1",
-    "joblib ~= 1.5.3",
-    "pydantic >= 2.13.4, < 2.15.0",
-    "packaging >= 24.2",
+    "joblib ~= 1.6.0",
+    "pydantic >= 2.13.5, < 2.15.0",
+    "packaging >= 26.3",
 
     # ML / training
     "torch ~= 2.13.0",
-    "lightning ~= 2.6.5",
-    "transformers ~= 5.14.1",
-    "trl ~= 1.8.0",
-    "peft ~= 0.19.1",
-    "datasets ~= 5.0.0",
-    "accelerate ~= 1.14.0",
+    "lightning ~= 2.6.6",
+    "transformers ~= 5.17.0",
+    "trl ~= 1.14.0",
+    "peft ~= 0.21.0",
+    "datasets ~= 5.0.1",
+    "accelerate ~= 1.15.0",
     "safetensors ~= 0.8.0",
 
     # Tracking
-    "trackio ~= 0.31.5",
-    "wandb ~= 0.28.1",
+    "trackio ~= 0.38.1",
+    "wandb ~= 0.30.0",
 
     # Hub / data transfer
-    "huggingface_hub[hf_xet] ~= 1.24.0",
-    "hf-transfer ~= 0.1.9",
+    "huggingface_hub[hf_xet] ~= 1.32.0",
 
     # Other dependencies
-    "pandas ~= 3.0.3",
+    "pandas ~= 3.0.6",
 ]
 
 [dependency-groups]
@@ -70,7 +69,7 @@ dev = [
 ]
 lint = [
     "pre-commit",
-    "ruff",
+    "ruff ~= 0.16.8",
 ]
 test = [
     "pytest",
@@ -82,12 +81,21 @@ notebook = [
     "ipywidgets",
 ]
 gpu = [
-    "bitsandbytes ~= 0.49.2",
+    "bitsandbytes ~= 0.50.2",
+]
+# The async lanes load kernels-community/flash-attn3 through `kernels`. Keep this range equal to the
+# `kernels` extra of the pinned transformers (5.17: >=0.16,<0.17) and move it with every transformers bump.
+async = [
+    "kernels ~= 0.16.2",
 ]
 
 [tool.uv]
 required-version = ">=0.9.17"
 exclude-newer = "7 days"
+# Resolver-level opt-out for a package the user approved before its 1-week cooldown.
+# The timestamp caps the opt-out: trl releases after the approval date stay blocked.
+# Remove the entry together with its [tool.intern.deps.exceptions] twin once it expires.
+exclude-newer-package = { trl = "2026-09-27T00:00:00Z" }
 environments = [
     "sys_platform == 'darwin'",
     "sys_platform == 'linux'",
@@ -116,7 +124,7 @@ packages = ["src"]
 # Dated, SELF-EXPIRING one-time exceptions to the >=1-week dependency-age gate —
 # NOT a rule change. The gate downgrades the violation to info: until the date,
 # then re-arms itself; remove entries once expired.
-exceptions = {}
+exceptions = { trl = "2026-10-02" }  # trl 1.14.0 (released 2026-09-25), user-approved 2026-09-27
 
 [tool.ruff]
 line-length = 120

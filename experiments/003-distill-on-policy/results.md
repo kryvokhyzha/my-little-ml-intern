@@ -59,8 +59,9 @@ on-policy generation path: `generate_on_policy_outputs` drops its
 `pad_token_id` parameter, completion masking switches from pad-id matching to
 `torch.isin` EOS detection plus the prompt attention mask, and the generation
 config gains `top_p: 1.0` (verified by diffing the v1.8.0 and v1.9.0 tags). That
-is a correctness fix — the old pad-id matching corrupted labels when pad ids
-appear in real prompt text — so the newer numbers are the trustworthy ones, but
+is a correctness fix — the old pad-id matching zeroed attention on every
+eos-id token, including in-prompt turn separators, and dropped the generated
+EOS from the loss — so the newer numbers are the trustworthy ones, but
 they are **not comparable** to the values above. After upgrading, re-run this
 path rather than comparing across the boundary.
 
@@ -69,6 +70,19 @@ path rather than comparing across the boundary.
 - Stronger teacher: `SmolLM2-1.7B-Instruct` (same tokenizer, one config line).
 - A generation-quality claim metric (e.g. teacher-judged or verifier-based)
   instead of dataset CE, so the on-policy mechanism is measured on-policy.
+
+## Version boundary — TRL 1.8 → 1.14 (2026-09-27)
+
+These numbers came from trl 1.8.0. TRL 1.9 changed GKD's masking. With
+`pad_token_id == eos_token_id`, 1.8 set `attention_mask=0` on EVERY eos-id token
+of an on-policy sequence — the in-prompt `<|im_end|>` turn separators included,
+for both the student and the teacher forward — and excluded the generated EOS
+from the loss. 1.9+ uses the prompt attention mask and keeps the completion up
+to and including the first EOS; on-policy sampling also forces `top_p=1` now. A
+re-run on trl ≥ 1.9 changes what both models attend to, the loss-token count,
+and the JSD values. Do not compare the
+JSD numbers above with a newer run — re-run this baseline instead
+([docs/010](../../docs/010-trl-1-14-upgrade.md)).
 
 ## Reproduce
 

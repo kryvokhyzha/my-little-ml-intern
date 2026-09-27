@@ -4,18 +4,18 @@ This file gives the angle taxonomy for the hypothesis tags. Every hypothesis in
 plan.md carries exactly one tag. A healthy seed set covers ≥ 4 distinct angles.
 No angle holds more than 30% of the live hypotheses.
 
-| tag | angle            | example one-override hypotheses                                                                     |
-| --- | ---------------- | --------------------------------------------------------------------------------------------------- |
-| A   | optimization     | learning rate, warmup ratio, schedule, optimizer choice, gradient clipping                          |
-| B   | regularization   | weight decay, dropout, label smoothing, NEFTune noise alpha                                         |
-| C   | architecture     | layer count, hidden dim, attention variant, norm placement (base-model or lightning module choice)  |
-| D   | data             | mixture ratios, curriculum order, packing, dedup/filter threshold, sampling strategy                |
-| E   | loss             | objective variant, auxiliary loss weight, DPO beta, distillation temperature                        |
-| F   | efficiency       | precision (bf16), batch packing, gradient accumulation, torch.compile — more signal per GPU-hour    |
-| G   | cross-domain     | a technique transplanted from an adjacent field (CV/RL/audio/bio) into this task                    |
-| H   | scaling          | wider vs deeper, more tokens vs more params, batch size, context length — mind scale_ceiling_params |
-| I   | repo-mined       | a concrete trick from a reference implementation or top repo (research.md rows), not from a paper   |
-| J   | counterintuitive | test the negation of a community default ("larger batch helps" → try tiny batch)                    |
+| tag | angle            | example one-override hypotheses                                                                                                                                       |
+| --- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A   | optimization     | learning rate, warmup ratio, schedule, optimizer choice, gradient clipping                                                                                            |
+| B   | regularization   | weight decay, dropout, label smoothing, NEFTune noise alpha                                                                                                           |
+| C   | architecture     | layer count, hidden dim, attention variant, norm placement (base-model or lightning module choice)                                                                    |
+| D   | data             | mixture ratios, curriculum order, packing, dedup/filter threshold, sampling strategy                                                                                  |
+| E   | loss             | objective variant, auxiliary loss weight (MoE models with `output_router_logits`, e.g. Qwen3-MoE or Mixtral; not Gemma 4 26B-A4B), DPO beta, distillation temperature |
+| F   | efficiency       | precision (bf16), batch packing, gradient accumulation, torch.compile — more signal per GPU-hour                                                                      |
+| G   | cross-domain     | a technique transplanted from an adjacent field (CV/RL/audio/bio) into this task                                                                                      |
+| H   | scaling          | wider vs deeper, more tokens vs more params, batch size, context length — mind scale_ceiling_params                                                                   |
+| I   | repo-mined       | a concrete trick from a reference implementation or top repo (research.md rows), not from a paper                                                                     |
+| J   | counterintuitive | test the negation of a community default ("larger batch helps" → try tiny batch)                                                                                      |
 
 ## Tag rules
 
