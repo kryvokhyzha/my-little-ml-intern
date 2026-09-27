@@ -6,6 +6,16 @@ from pathlib import Path
 from typing import Any
 
 
+# On-policy lanes that sample completions from a ``prompt`` column (conversational or standard).
+_PROMPT_ONLY_TASKS = (
+    "trl_grpo",
+    "trl_rloo",
+    "trl_sdpo",
+    "trl_ssd",
+    "trl_distill",
+    "trl_async_grpo",
+    "trl_async_distill",
+)
 _FILE_FORMATS = {".json": "json", ".jsonl": "json", ".csv": "csv", ".parquet": "parquet", ".txt": "text"}
 
 
@@ -42,11 +52,13 @@ def validate_columns(dataset: Any, task: str, split: str, text_field: str = "tex
 
     Contracts (TRL dataset formats): SFT accepts ``text``/``text_field``,
     ``prompt``+``completion``, or ``messages``; DPO requires ``chosen``+``rejected``
-    (``prompt`` optional — the implicit-prompt preference format is valid); GRPO
-    requires ``prompt``; GKD requires ``messages``; KTO requires
-    ``prompt``+``completion``+``label``. Unknown tasks are not checked. Extra columns are always
-    allowed — e.g. tool-calling SFT ships ``messages`` + ``tools``, and TRL forwards
-    ``tools`` to the chat template.
+    (``prompt`` optional — the implicit-prompt preference format is valid); KTO requires
+    ``prompt``+``completion``+``label``; GKD requires ``messages``; GOLD accepts ``messages``
+    or ``prompt``+``completion``; SDFT requires ``prompt``+``privileged_context``; every
+    other on-policy lane (GRPO, RLOO, SDPO, SSD, distill, and the async lanes) requires
+    ``prompt``. Unknown tasks are not checked. Extra columns are always allowed — e.g.
+    tool-calling SFT ships ``messages`` + ``tools``, and reward functions receive every
+    extra column as a kwarg.
 
     Raises:
         ValueError: When the dataset lacks every accepted column set for the task.
@@ -59,12 +71,18 @@ def validate_columns(dataset: Any, task: str, split: str, text_field: str = "tex
     elif task == "trl_dpo":
         accepted = "'chosen'+'rejected' ('prompt' optional)"
         ok = {"chosen", "rejected"} <= columns
-    elif task == "trl_grpo":
-        accepted = "'prompt' (GRPOTrainer samples completions from prompts)"
+    elif task in _PROMPT_ONLY_TASKS:
+        accepted = "'prompt' (the on-policy trainer samples completions from prompts)"
         ok = "prompt" in columns
     elif task == "trl_gkd":
         accepted = "'messages' (GKD's collator consumes conversational data)"
         ok = "messages" in columns
+    elif task == "trl_gold":
+        accepted = "'messages' or 'prompt'+'completion'"
+        ok = "messages" in columns or {"prompt", "completion"} <= columns
+    elif task == "trl_sdft":
+        accepted = "'prompt'+'privileged_context' (the self-teacher sees the context, the student does not)"
+        ok = {"prompt", "privileged_context"} <= columns
     elif task == "trl_kto":
         accepted = "'prompt'+'completion'+'label' (unpaired per-example desirable/undesirable feedback)"
         ok = {"prompt", "completion", "label"} <= columns

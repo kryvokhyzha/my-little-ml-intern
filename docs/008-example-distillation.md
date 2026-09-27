@@ -120,25 +120,31 @@ This is the distill-traces skill's loop end-to-end on the smallest honest task
 acceptance) — swap the arithmetic pool for real agent tasks and the same
 machinery carries over.
 
-## The TRL distillation landscape (1.8.0)
+## The TRL distillation landscape (1.14)
 
-What TRL itself offers, mapped to this repo. Everything below the stable line
-lives in `trl.experimental` — a lane for any of them is a one-file
-`configs/trainer/<name>.yaml` addition (the `args._target_` pattern) plus a
-`run_*` entry, added when an experiment actually needs it, not before.
+What TRL itself offers, mapped to this repo. Rows marked "experimental" live in
+`trl.experimental`. Updated for the TRL 1.14 upgrade
+([docs/010](010-trl-1-14-upgrade.md)); the lanes run through the same gates as
+every other lane.
 
-| TRL module                                    | Method (paper)                                                                                             | Teacher?                         | Our coverage                                                                                   |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `SFTTrainer` (stable)                         | off-policy imitation                                                                                       | offline (authored the data)      | `trl_sft` — **002**                                                                            |
-| `experimental.gkd`                            | GKD on-policy KD (Agarwal 2023)                                                                            | live, same tokenizer             | `trl_gkd` — **003**                                                                            |
-| generate→verify→SFT (no dedicated trainer)    | STaR / rejection-sampling FT                                                                               | none — self                      | `prep-self-distill.py` + `trl_sft` — **004**                                                   |
-| `experimental.ssd`                            | Simple Self-Distillation (Zhang 2026): FT on raw UNVERIFIED self-samples                                   | none — self                      | not shipped; 004's verifier-first loop is the stricter cousin                                  |
-| `experimental.sdft`                           | Self-Distillation FT (Shenfeld 2026): task-prompted self as teacher, continual learning without forgetting | none — self (prompt-conditioned) | not shipped; candidate lane when continual-learning experiments start                          |
-| `experimental.gold`                           | GOLD: on-policy distillation ACROSS tokenizers/model families                                              | live, any tokenizer              | not shipped; the escape hatch when teacher/student vocabularies differ (GKD's hard constraint) |
-| `experimental.minillm`                        | MiniLLM: reverse-KL policy-gradient distillation                                                           | live                             | not shipped                                                                                    |
-| `experimental.distillation`                   | plain logit distillation (standalone config)                                                               | live                             | not shipped                                                                                    |
-| `GRPOTrainer` (stable) + verifier rewards     | RLVR — RL flavor of self-improvement                                                                       | none — reward function           | `trl_grpo` lane                                                                                |
-| `experimental.online_dpo` / `nash_md` / `xpo` | self-play preference optimization                                                                          | judge/reward                     | not shipped                                                                                    |
+| TRL module                                 | Method (paper)                                                                          | Teacher?                          | Our coverage                                             |
+| ------------------------------------------ | --------------------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------- |
+| `SFTTrainer` (stable)                      | off-policy imitation                                                                    | offline (authored the data)       | `trl_sft` — **002**                                      |
+| `experimental.gkd`                         | GKD on-policy KD with a dataset mix (Agarwal 2023)                                      | live, same tokenizer              | `trl_gkd` — **003**                                      |
+| `DistillationTrainer` (stable since 1.10)  | fully on-policy generalized-JSD distillation                                            | live, same vocabulary             | `trl_distill`                                            |
+| `experimental.gold`                        | GOLD: on-policy distillation ACROSS tokenizers (ULD)                                    | live, any tokenizer               | `trl_gold`                                               |
+| `experimental.async_distillation`          | async on-policy distillation; multi-teacher routing (MOPD)                              | vLLM HTTP server(s)               | `trl_async_distill` (GPU only)                           |
+| generate→verify→SFT (no dedicated trainer) | STaR / rejection-sampling FT                                                            | none — self + verifier            | `prep-self-distill.py` + `trl_sft` — **004**             |
+| `experimental.ssd`                         | Simple Self-Distillation (Zhang 2026): FT on raw UNVERIFIED self-samples                | none — self                       | `trl_ssd`                                                |
+| `experimental.sdft`                        | Self-Distillation FT (Shenfeld 2026): the self with a privileged context is the teacher | none — self (context-conditioned) | `trl_sdft`                                               |
+| `experimental.sdpo`                        | Self-Distillation Policy Optimization: reward-selected successes, EMA self-teacher      | none — self + reward functions    | `trl_sdpo`                                               |
+| `experimental.minillm`                     | MiniLLM: reverse-KL policy-gradient distillation                                        | live                              | not shipped (add when a plan needs it)                   |
+| `experimental.iw_opd`                      | importance-weighted on-policy distillation (pre-1.9 DistillationTrainer snapshot)       | live                              | not shipped (`trl_distill` covers the family)            |
+| `GRPOTrainer` / `RLOOTrainer` (stable)     | RLVR — the RL flavor of self-improvement; GRPO also runs tool environments              | none — reward / environment       | `trl_grpo`, `trl_grpo_env`, `trl_rloo`, `trl_async_grpo` |
+
+TRL 1.14 removed `experimental.nash_md`, `xpo`, `bco`, `prm`, and
+`grpo_with_replay_buffer`; `experimental.online_dpo` remains and is not shipped
+here.
 
 ## When teacher and student tokenizers differ
 
@@ -159,13 +165,14 @@ tokenizers break them. The menu that survives:
   and merges token probabilities across the two tokenizations of the same text.
   Key knobs: `use_uld_loss: true`, `teacher_tokenizer_name_or_path`,
   `use_extended_uld`, `uld_token_merge_strategy`; optional vLLM-served teacher.
-  One-file lane addition when an experiment needs it.
+  Shipped as the `trl_gold` lane.
 - Outside TRL (research-grade): vocabulary transplantation / token-alignment
   (retokenize the student to the teacher's vocab, then plain GKD) — heavy
   surgery, rarely worth it versus GOLD or text-level.
 
-Rule of thumb: same family → `trl_gkd` (cheapest signal-per-token). Different
-open-weights families → GOLD or text-level. API-only teacher → text-level only.
+Rule of thumb: same family → `trl_distill` or `trl_gkd` (cheapest
+signal-per-token). Different open-weights families → `trl_gold` or text-level.
+API-only teacher → text-level only.
 
 ## When to use which (short version)
 

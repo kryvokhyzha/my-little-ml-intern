@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from intern.metrics import MetricsLog
 from intern.verify import RunVerifier, verify_run
 
@@ -79,6 +81,8 @@ def test_all_pass_scenario(tmp_path):
         "reward_margin": "SKIP",
         "kl_ref": "SKIP",
         "reward_variance": "SKIP",
+        "completion_termination": "SKIP",
+        "training_signal": "SKIP",
     }
     assert verifier.passed(results)
     assert "warning line" in by_name(results)["stderr_scan"].detail
@@ -340,7 +344,7 @@ def test_report_format_is_greppable(tmp_path):
     for line in lines[:-1]:
         assert verdict_re.match(line), line
     assert "VERDICT: loss_plausibility = PASS" in lines[0]
-    assert re.match(r"^OVERALL: PASS \(6 passed, 0 failed, 3 skipped\)$", lines[-1])
+    assert re.match(r"^OVERALL: PASS \(6 passed, 0 failed, 5 skipped\)$", lines[-1])
 
 
 def test_verify_run_exit_2_when_metrics_missing(tmp_path):
@@ -414,6 +418,28 @@ def test_val_loss_counts_as_eval(tmp_path):
     assert result.status == "PASS"
 
 
+_CHAT_PROMPT = "user\nWhat is 95 + 72? Reply with only the number. Show no working and add no other words.\nassistant\n"
+
+
+@pytest.mark.parametrize(
+    ("completion", "status", "detail"),
+    [
+        ("167", "PASS", None),  # a short answer is not degenerate
+        ("", "FAIL", "empty completion"),  # the policy collapsed to an immediate EOS
+        ("5 " * 20, "FAIL", "unique-token ratio"),  # a looping answer behind a long prompt
+    ],
+)
+def test_samples_check_the_completion_not_only_the_prompt(tmp_path, completion, status, detail):
+    exp = tmp_path / "001-demo"
+    record = {"prompt": _CHAT_PROMPT, "text": _CHAT_PROMPT + completion, "completion": completion}
+    build_run(exp, samples=json.dumps(record))
+
+    result = by_name(RunVerifier(exp).run())["generation_sanity"]
+    assert result.status == status
+    if detail:
+        assert detail in result.detail
+
+
 def test_cjk_samples_use_character_tokens(tmp_path):
     exp = tmp_path / "001-demo"
     text = "从前有一只小狐狸住在森林里它每天都去河边喝水然后回到山上的家慢慢睡着了第二天又开始新的一天" * 2
@@ -442,3 +468,110 @@ def test_grpo_missing_samples_fails(tmp_path):
     log.append_event("meta", key="task", value="trl_grpo")
 
     assert by_name(RunVerifier(exp).run())["generation_sanity"].status == "FAIL"
+
+
+def test_unknown_task_without_samples_fails_closed(tmp_path):
+    # A new lane that forgot to write samples must not pass the gate silently (docs/009 finding).
+    exp = tmp_path / "001-demo"
+    log = build_run(exp, samples=None)
+    log.append_event("meta", key="task", value="trl_brand_new_lane")
+
+    assert by_name(RunVerifier(exp).run())["generation_sanity"].status == "FAIL"
+
+
+@pytest.mark.parametrize("task", ["trl_distill", "trl_sdft", "trl_sdpo", "trl_ssd", "trl_rloo", "trl_async_grpo"])
+def test_new_generative_lanes_require_samples(tmp_path, task):
+    exp = tmp_path / "001-demo"
+    log = build_run(exp, train_loss=0.02, samples=None)
+    log.append_event("meta", key="task", value=task)
+
+    results = by_name(RunVerifier(exp).run())
+    assert results["loss_plausibility"].status == "SKIP"  # JSD / RL / self-distill loss is not vocab CE
+    assert results["generation_sanity"].status == "FAIL"
+
+
+def test_env_line_comes_from_the_last_run_start(tmp_path):
+    exp = tmp_path / "001-demo"
+    log = MetricsLog(exp / "metrics.jsonl")
+    log.append_event("run_start", task="trl_sft", env={"trl": "1.8.0"})
+    log.append_event("run_start", task="trl_sft", env={"trl": "1.14.0", "device": "cpu"})
+    build_run(exp)  # appends metrics after the second run_start
+
+    verify_run(exp)
+    lines = (exp / "verify.md").read_text().splitlines()
+    assert "ENV: trl=1.14.0 device=cpu" in lines
+
+
+def test_waiver_and_eval_lines_survive_rewrite_but_never_flip_the_exit_code(tmp_path):
+    exp = tmp_path / "001-demo"
+    build_run(exp, train_loss=0.5)  # red-flag FAIL
+    assert verify_run(exp) == 1
+    with (exp / "verify.md").open("a") as fh:
+        fh.write("WAIVER: loss_plausibility = WAIVED | known in-distribution data\n")
+        fh.write("EVAL: success_rate = 0.95 | baseline 0.867\n")
+
+    assert verify_run(exp) == 1  # a waiver documents an exception; the gate still fails
+    text = (exp / "verify.md").read_text()
+    assert text.count("WAIVER:") == 1 and text.count("EVAL:") == 1
+
+
+def test_data_consumption_falls_back_to_trl_num_tokens(tmp_path):
+    exp = tmp_path / "001-demo"
+    log = build_run(exp, tokens_seen=None)
+    log.append_event("meta", key="task", value="trl_grpo")
+    log.append_metric(100, "num_tokens", 950_000)
+
+    result = by_name(RunVerifier(exp).run())["data_consumption"]
+    assert result.status == "PASS" and result.value == 950_000
+
+
+def test_data_consumption_skips_lanes_that_count_no_tokens(tmp_path):
+    exp = tmp_path / "001-demo"
+    log = build_run(exp, tokens_seen=0)
+    log.append_event("meta", key="task", value="trl_sdft")
+
+    assert by_name(RunVerifier(exp).run())["data_consumption"].status == "SKIP"
+
+
+def test_zero_tokens_on_an_sft_run_still_fails(tmp_path):
+    exp = tmp_path / "001-demo"
+    build_run(exp, tokens_seen=0)
+
+    assert by_name(RunVerifier(exp).run())["data_consumption"].status == "FAIL"
+
+
+@pytest.mark.parametrize(("clipped", "status"), [(1.0, "FAIL"), (0.96, "FAIL"), (0.2, "PASS"), (None, "SKIP")])
+def test_completion_termination(tmp_path, clipped, status):
+    exp = tmp_path / "001-demo"
+    log = build_run(exp)
+    if clipped is not None:
+        log.append_metric(100, "completions/clipped_ratio", clipped)
+
+    assert by_name(RunVerifier(exp).run())["completion_termination"].status == status
+
+
+@pytest.mark.parametrize(
+    ("metric", "values", "status"),
+    [
+        ("ssd/active_sample_ratio", [0.0, 0.0, 0.0], "FAIL"),
+        ("ssd/active_sample_ratio", [0.0, 0.5], "PASS"),
+        ("self_distillation/reprompt_sample_fraction", [0.0, 0.0], "FAIL"),
+        (None, [], "SKIP"),
+    ],
+)
+def test_training_signal(tmp_path, metric, values, status):
+    exp = tmp_path / "001-demo"
+    log = build_run(exp)
+    for step, value in enumerate(values):
+        log.append_metric(step, metric, value)
+
+    assert by_name(RunVerifier(exp).run())["training_signal"].status == status
+
+
+def test_reward_variance_reads_sdpo_keys(tmp_path):
+    exp = tmp_path / "001-demo"
+    log = build_run(exp)
+    for step in range(3):
+        log.append_metric(step, "self_distillation/reward_std", 0.0)
+
+    assert by_name(RunVerifier(exp).run())["reward_variance"].status == "FAIL"

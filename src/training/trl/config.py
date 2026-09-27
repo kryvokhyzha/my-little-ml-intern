@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 from omegaconf import DictConfig, OmegaConf
@@ -11,6 +12,15 @@ from helper.display import is_interactive
 
 if TYPE_CHECKING:
     from datasets import Dataset
+
+
+# Lanes whose batches carry input_ids, so transformers' num_input_tokens_seen counter works.
+DICT_BATCH_TASKS = ("trl_sft", "trl_dpo", "trl_kto", "trl_gkd", "trl_gold")
+# TRL 1.14's disable_gradient_checkpointing (trl/models/utils.py) re-enables checkpointing with the raw
+# gradient_checkpointing_kwargs. That bypasses the Trainer, which pops these transformers >= 5.17 keys,
+# so these lanes crash mid-run ("Unexpected keyword arguments"). Remove when TRL passes them through.
+GC_REENABLE_TASKS = ("trl_grpo", "trl_rloo", "trl_dpo", "trl_kto")
+TRAINER_ONLY_GC_KWARGS = ("offload", "every_n_layers")
 
 
 def report_to(backend: str | None) -> str:
@@ -69,11 +79,24 @@ def build_args(cfg: DictConfig, **overrides: Any) -> Any:
         d["trackio_space_id"] = str(space_id)
         private = OmegaConf.select(cfg, "tracking.private")
         d["hub_private_repo"] = True if private is None else bool(private)
-    d["include_num_input_tokens_seen"] = True
+    if d["report_to"] == "trackio":
+        # transformers' TrackioCallback otherwise syncs the metrics to a static Space on every Hub push,
+        # public unless hub_private_repo=True. An explicit trainer.args value still wins.
+        d.setdefault("trackio_static_space_id", False)
+    # transformers counts tokens only for dict batches; on the rollout-batch lanes it warns on every
+    # micro-step and counts nothing, so those lanes rely on TRL's own `num_tokens` metric instead.
+    kind = OmegaConf.select(cfg, "trainer.kind")
+    d["include_num_input_tokens_seen"] = True if kind is None or kind in DICT_BATCH_TASKS else "no"
     # Keep NaN losses visible to the alert callback; the default filter logs them as 0.0.
     d["logging_nan_inf_filter"] = False
     d.setdefault("disable_tqdm", not is_interactive())
+    if not is_interactive():
+        # TRL's DPO/KTO reference-logprob loop reads only TQDM_DISABLE, not args.disable_tqdm.
+        os.environ.setdefault("TQDM_DISABLE", "1")
     d.update(overrides)
+    bad = sorted(set(TRAINER_ONLY_GC_KWARGS) & set(d.get("gradient_checkpointing_kwargs") or {}))
+    if bad and kind in GC_REENABLE_TASKS:
+        raise ValueError(f"gradient_checkpointing_kwargs {bad} crash {kind} on TRL 1.14: remove them for this lane")
     _resolve_bf16(d)
     # _convert_="all": nested kwargs (lr_scheduler_kwargs, gradient_checkpointing_kwargs)
     # land as plain dicts, not DictConfig — TrainingArguments' JSON serialization needs that.

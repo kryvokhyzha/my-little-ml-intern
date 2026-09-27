@@ -82,6 +82,12 @@ fails at model load with a clear error naming `uv sync --group gpu` when
 bitsandbytes is absent. Smoke directly on the CUDA target with `smoke_test=true`
 (`max_steps=1`, dataset sliced to ≤ 32 rows, no checkpoint save).
 
+> **Update (2026-09-27, [docs/010](010-trl-1-14-upgrade.md)).** The paragraph
+> above describes bitsandbytes 0.49, which 001 ran on. bitsandbytes ≥ 0.50 runs
+> the 4-bit layers on CPU: a QLoRA smoke now passes on a CPU box with
+> `uv sync --group gpu` and `++trainer.args.use_cpu=true` (verified with
+> 0.50.2). MPS is unverified. The real QLoRA run still needs CUDA.
+
 To validate the data + trl_sft plumbing without a GPU, swap the model group to a
 tiny non-quantized proxy (see task.md):
 `model=smollm2_135m 'trainer.peft.target_modules=all-linear' smoke_test=true`

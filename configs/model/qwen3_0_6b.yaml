@@ -1,0 +1,12 @@
+# Tool-calling-capable small base for the environment lanes (trl_grpo_env, trl_async_grpo):
+# TRL parses Qwen3 tool calls, while the SmolLM2 and Gemma 1-3 templates are refused.
+# Distillation pairs: Qwen3-1.7B / Qwen3-4B share this tokenizer, so they can be the
+# `model.teacher` for trl_distill / trl_gkd.
+main:
+  _target_: transformers.AutoModelForCausalLM.from_pretrained
+  _args_: ["Qwen/Qwen3-0.6B"]
+  dtype: float32
+
+tokenizer:
+  _target_: transformers.AutoTokenizer.from_pretrained
+  _args_: ["${model.main._args_[0]}"]

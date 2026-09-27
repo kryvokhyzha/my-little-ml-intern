@@ -66,28 +66,57 @@ run failed, whatever the loss shows.
    "verify.py" section of `docs/001-architecture.md` when a name is unfamiliar.
    The default checks are:
 
-   | check                      | one-line meaning                                                                   |
-   | -------------------------- | ---------------------------------------------------------------------------------- |
-   | `loss_plausibility`        | final train loss inside the ln(vocab) band; < 1.0 on an LM task is a red-flag FAIL |
-   | `eval_train_gap`           | eval and train loss within 0.5 of each other                                       |
-   | `data_consumption`         | model actually saw ≥ 70% of planned tokens                                         |
-   | `stderr_scan`              | no Traceback / RuntimeError / CUDA OOM in logs/stderr.log                          |
-   | `param_drift`              | actual param count within 15% of target                                            |
-   | `generation_sanity`        | samples.jsonl exists, not degenerate (mechanical proxies only)                     |
-   | `reward_margin` / `kl_ref` | DPO-only: positive reward margin, finite KL                                        |
+   | check                      | one-line meaning                                                                      |
+   | -------------------------- | ------------------------------------------------------------------------------------- |
+   | `loss_plausibility`        | final train loss inside the ln(vocab) band; < 1.0 on an LM task is a red-flag FAIL    |
+   | `eval_train_gap`           | eval and train loss within 0.5 of each other                                          |
+   | `data_consumption`         | model actually saw ≥ 70% of planned tokens                                            |
+   | `stderr_scan`              | no Traceback / RuntimeError / CUDA OOM in logs/stderr.log                             |
+   | `param_drift`              | actual param count within 15% of target                                               |
+   | `generation_sanity`        | samples.jsonl exists, no empty `completion`, not degenerate (mechanical proxies only) |
+   | `reward_margin` / `kl_ref` | DPO-only: positive reward margin, finite KL                                           |
+   | `reward_variance`          | RL lanes: `reward_std` is not 0 for the whole run (the run optimized something)       |
+   | `completion_termination`   | on-policy lanes: < 95% of completions hit `max_completion_length` (EOS still emitted) |
+   | `training_signal`          | SSD / SDPO: the lane activity metric is > 0 at some step (the run trained on data)    |
+
+   `generation_sanity` fails closed: only `trl_dpo`, `trl_kto`, `lightning`, and
+   `axolotl` may skip samples. Every other lane, and an unknown one, fails
+   without `logs/samples.jsonl`. The `ENV:` line names the library versions and
+   the git commit of the verified run. Compare two runs only when their `ENV:`
+   lines name the same `trl` and `transformers` versions (for a QLoRA path, also
+   the same `bitsandbytes` version); otherwise say so.
 
 4. **MANDATORY human-judgment step — even on a mechanical PASS.** Read
-   `experiments/NNN-<slug>/logs/samples.jsonl`. Judge whether the generations
-   are recognizable language for the training distribution. A TinyStories model
-   must produce story-like English. A code model must produce code-like text.
-   Text that uses a valid vocabulary but carries no meaning is a fail, not a
-   partial pass. Append your judgment to verify.md as one line:
+   `experiments/NNN-<slug>/logs/samples.jsonl`. Read the `completion` field:
+   `text` repeats the prompt. Judge whether the generations are recognizable
+   language for the training distribution. A TinyStories model must produce
+   story-like English. A code model must produce code-like text. Text that uses
+   a valid vocabulary but carries no meaning is a fail, not a partial pass.
+   Append your judgment to verify.md as one line:
 
    ```
    JUDGMENT: generation_quality = PASS|FAIL | <one-line reasoning against the training distribution>
    ```
 
    A FAIL judgment fails the whole run, even when the exit code was 0.
+
+   Two more agent-written line types exist. The gate keeps `JUDGMENT:`,
+   `WAIVER:`, and `EVAL:` lines when it rewrites verify.md. None of them changes
+   the exit code:
+
+   ```
+   WAIVER: <check> = WAIVED | <the benign mechanism, with the evidence> | <approved by: user | headless, approval_required fired>
+   EVAL: <claim metric> = <value> | baseline <value> | <delta, noise estimate, expected_delta met or not>
+   ```
+
+   - Write a WAIVER only for a FAIL whose benign mechanism you can name and
+     test. Ask the user first (headless: fire `notify.sh approval_required`).
+   - A waived run still exits 1. Its results.md must start with "verify exit 1 →
+     waived <check>", and the publish gate still refuses it.
+   - Write an EVAL line for the plan's claim metric (held-out success rate,
+     benchmark score) — the number that the loss cannot prove.
+   - Record the waiver decision in the journal too:
+     `uv run python scripts/python/intern.py journal --experiment NNN add --kind decision --text "<waiver + why>"`.
 
 5. **Route the outcome.**
 

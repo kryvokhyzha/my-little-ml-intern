@@ -228,6 +228,28 @@ A FAIL judgment fails the run overall even when the exit code was 0. The check
 thresholds, task-awareness, and exit codes are catalogued in
 [004-budget-and-gates.md](004-budget-and-gates.md).
 
+Two more lines complete the report. The gate writes an `ENV:` line from the
+run's provenance stamp (python, torch, transformers, trl, … and the git commit),
+so a number always names the trainer version that produced it. The agent may
+append `WAIVER:` and `EVAL:` lines (formats in
+[001-architecture.md](001-architecture.md)); like `JUDGMENT:`, they survive a
+rewrite and never change the exit code.
+
+## 7b. The journal
+
+`journal.md` is the experiment's chronological lab notebook. Nobody has to
+remember to write most of it: the training adapter logs each run's start (with
+the `ENV` stamp) and its VERDICT, and every state-changing gate command logs its
+outcome. The agent adds what no gate can see — why the plan changed:
+
+```bash
+uv run python scripts/python/intern.py journal --experiment 001 add --kind decision --path-id path-2 --text "halve lr: divergence alert at step 120"
+uv run python scripts/python/intern.py journal --experiment 001 show --tail 20
+```
+
+The ledger says what each path scored; the journal says what happened, in order.
+After a context reset, read the journal before anything else.
+
 ## 8. run.md and results.md
 
 As the run executes, `train-llm` records the exact commands it ran on the
@@ -252,9 +274,10 @@ uv run python scripts/python/intern.py status --experiment 001          # human-
 uv run python scripts/python/intern.py status --experiment 001 --json   # machine-readable
 ```
 
-It shows the verify verdicts, budget caps vs spent, and the ledger rows in one
-place. Exit 0 (2 when the experiment doesn't exist). It is a read-only
-dashboard, not a gate — use it before deciding the next action.
+It shows the verify verdicts, budget caps vs spent, the ledger rows, and the
+last five journal entries in one place. Exit 0 (2 when the experiment doesn't
+exist). It is a read-only dashboard, not a gate — use it before deciding the
+next action.
 
 ## 10. Where publish fits
 

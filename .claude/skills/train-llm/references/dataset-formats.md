@@ -23,6 +23,14 @@ Notes:
   exceptions.
 - **GRPO** has no completion column to validate. The contract moves to the
   reward functions. Read `references/grpo-rewards.md` before you write one.
+  `trl_grpo`, `trl_rloo`, and `trl_grpo_env` do not truncate prompts. Trim
+  over-long prompt rows in data prep. Only `max_completion_length` bounds the
+  sequence.
+- datasets ≥ 5.0.1 reads a JSON file as a Hermes agent trace when it has the
+  string columns `id`, `source`, `model`, and `system_prompt` plus a `messages`
+  list. `load_split` then fails with `ImportError` (`teich`). If your SFT data
+  has these columns, add `parse_agent_traces: false` to the data node.
+  `load_split` forwards the key to `load_dataset`.
 - TRL usually tolerates extra columns beyond the required ones. Map the extra
   columns away anyway. A silent column pickup has caused training on the wrong
   field.
@@ -84,6 +92,7 @@ def to_dpo(example):
         "chosen": example["chosen_response"],
         "rejected": example["rejected_response"],
     }
+
 
 dataset = dataset.map(to_dpo, remove_columns=dataset.column_names)
 ```

@@ -1,4 +1,4 @@
-"""Enforcement CLI: verify / budget / ledger / deps gates."""
+"""Enforcement CLI: verify / budget / ledger / deps gates, plus the per-experiment journal."""
 
 import json
 import sys
@@ -17,6 +17,7 @@ load_dotenv(find_dotenv(), override=True)
 
 from intern.budget import BudgetGate, load_budget, load_budget_profile, save_budget
 from intern.deps import check_project
+from intern.journal import KINDS, Journal
 from intern.ledger import Ledger
 from intern.publish import publish_run
 from intern.report import render_gates
@@ -44,6 +45,11 @@ def _resolve_experiment(experiment: str | int, experiments_root: str | None) -> 
     raise SystemExit(2)
 
 
+def _journal(experiment_dir: Path, text: str, path_id: str | None = None, kind: str = "gate") -> None:
+    """Record a gate outcome in the experiment's journal.md (the chronological audit trail)."""
+    Journal(experiment_dir / "journal.md").append(kind, text, path_id=path_id)
+
+
 def _as_checks(checks: str | list | tuple | None) -> list[str] | None:
     if checks is None:
         return None
@@ -59,11 +65,18 @@ def verify(
     experiments_root: str | None = None,
 ) -> None:
     experiment_dir = _resolve_experiment(experiment, experiments_root)
+    scoped = _as_checks(checks)
     try:
-        code = verify_run(experiment_dir, vocab_size=vocab_size, checks=_as_checks(checks))
+        code = verify_run(experiment_dir, vocab_size=vocab_size, checks=scoped)
     except ValueError as err:
         logger.error("{}", err)
         raise SystemExit(2) from None
+    if scoped is None:  # a scoped re-check writes no verify.md, so it leaves no journal entry either
+        summary = "missing artifacts"
+        if code != 2:
+            lines = (experiment_dir / "verify.md").read_text(encoding="utf-8").splitlines()
+            summary = next((line for line in lines if line.startswith("OVERALL:")), "no OVERALL line")
+        _journal(experiment_dir, f"verify exit {code} — {summary}")
     raise SystemExit(code)
 
 
@@ -111,6 +124,7 @@ def _budget_init(budget_path: Path, profile: str | None, force: bool) -> None:
             )
             raise SystemExit(1)
     save_budget(seeded, budget_path)
+    _journal(budget_path.parent, f"budget init --profile {profile}")
     logger.info(
         "Seeded {} from profile '{}': {} paths, {} retries/path, {} GPU-h cap, {} param ceiling",
         budget_path,
@@ -157,6 +171,7 @@ def budget(
         resolved = int(params) if params is not None else _resolve_params(experiment_dir)
         allowed, reason = gate.can_launch_path(params=resolved)
         print(reason)
+        _journal(experiment_dir, f"budget can-launch {'ALLOWED' if allowed else 'DENIED'} — {reason}")
         raise SystemExit(0 if allowed else 1)
     if action == "can-retry":
         if path_id is None:
@@ -168,6 +183,7 @@ def budget(
             raise SystemExit(2)
         allowed, reason = gate.can_retry(str(path_id), Ledger(ledger_path))
         print(reason)
+        _journal(experiment_dir, f"budget can-retry {'ALLOWED' if allowed else 'DENIED'} — {reason}", str(path_id))
         raise SystemExit(0 if allowed else 1)
     if action == "record-launch":
         gate.record_launch()
@@ -181,6 +197,12 @@ def budget(
             logger.error("budget record-gpu-h requires --hours >= 0, got {}", hours)
             raise SystemExit(2)
         gate.record_gpu_h(float(hours))
+    spent = gate.budget
+    _journal(
+        experiment_dir,
+        f"budget {action}{f' {hours}' if action == 'record-gpu-h' else ''} — paths_launched={spent.paths_launched}"
+        f" retries_used={spent.retries_used} gpu_h_used={spent.gpu_h_used}",
+    )
     raise SystemExit(0)
 
 
@@ -216,6 +238,8 @@ def ledger(
             logger.error("{}", err)
             raise SystemExit(2) from None
         print(json.dumps(row))
+        changed = " ".join(f"{key}={value}" for key, value in clean.items())
+        _journal(experiment_dir, f"ledger upsert {changed}".rstrip(), str(path_id))
         raise SystemExit(0)
     logger.error("Unknown ledger action '{}' (expected upsert|show)", action)
     raise SystemExit(2)
@@ -261,7 +285,41 @@ def publish(
     if not resolved:
         logger.warning("publish --private false: the Hub repo will be WORLD-READABLE — anyone can download it")
     experiment_dir = _resolve_experiment(experiment, experiments_root)
-    raise SystemExit(publish_run(experiment_dir, repo_id=repo_id, private=resolved))
+    code = publish_run(experiment_dir, repo_id=repo_id, private=resolved)
+    _journal(experiment_dir, f"publish exit {code} (private={resolved})")
+    raise SystemExit(code)
+
+
+def journal(
+    action: str,
+    experiment: str | int,
+    kind: str | None = None,
+    text: str | None = None,
+    path_id: str | None = None,
+    tail: int = 20,
+    experiments_root: str | None = None,
+) -> None:
+    """Append a decision / observation / lesson / blocker entry, or show the latest entries."""
+    experiment_dir = _resolve_experiment(experiment, experiments_root)
+    log = Journal(experiment_dir / "journal.md")
+    if action == "add":
+        if kind is None or text is None:
+            logger.error("journal add requires --kind ({}) and --text", "|".join(KINDS))
+            raise SystemExit(2)
+        try:
+            print(log.append(str(kind), str(text), path_id=None if path_id is None else str(path_id)))
+        except ValueError as err:
+            logger.error("{}", err)
+            raise SystemExit(2) from None
+        raise SystemExit(0)
+    if action == "show":
+        entries = [entry for entry in log.entries() if kind is None or entry["kind"] == kind]
+        for entry in entries[-int(tail) :]:
+            path = f"{entry['path_id']}: " if entry["path_id"] else ""
+            print(f"- {entry['ts']} [{entry['kind']}] {path}{entry['text']}")
+        raise SystemExit(0)
+    logger.error("Unknown journal action '{}' (expected add|show)", action)
+    raise SystemExit(2)
 
 
 def deps(min_age_days: int = 7) -> None:
@@ -283,6 +341,7 @@ if __name__ == "__main__":
             "ledger": ledger,
             "status": status,
             "publish": publish,
+            "journal": journal,
             "deps": deps,
         }
     )

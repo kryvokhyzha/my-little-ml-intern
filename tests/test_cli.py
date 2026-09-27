@@ -248,6 +248,33 @@ def test_ledger_upsert_then_show(experiments_root: Path) -> None:
     assert {"path-1", "path-2"} <= {row["path_id"] for row in rows}
 
 
+def test_journal_add_then_show(experiments_root: Path) -> None:
+    add = ("journal", "--experiment", "001", "add", "--experiments-root", experiments_root)
+    result = run_cli(*add, "--kind", "decision", "--text", "drop lr to 1e-5", "--path-id", "path-2")
+    assert result.returncode == 0, result.stderr
+    assert "[decision] path-2: drop lr to 1e-5" in result.stdout
+    assert run_cli(*add, "--kind", "musing", "--text", "x").returncode == 2
+
+    result = run_cli(
+        "journal", "--experiment", "001", "show", "--kind", "decision", "--experiments-root", experiments_root
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().endswith("[decision] path-2: drop lr to 1e-5")
+
+
+def test_gate_commands_write_journal_entries(experiments_root: Path) -> None:
+    upsert = ("ledger", "--experiment", "001", "upsert", "--path-id", "path-1", "--status", "passed")
+    assert run_cli(*upsert, "--experiments-root", experiments_root).returncode == 0
+    run_cli("verify", "--experiment", "001", "--experiments-root", experiments_root)
+    run_cli("budget", "--experiment", "001", "can-launch", "--params", "1000", "--experiments-root", experiments_root)
+
+    lines = (experiments_root / "001-demo" / "journal.md").read_text().splitlines()
+    gate_lines = [line for line in lines if "[gate]" in line]
+    assert any("path-1: ledger upsert status=passed" in line for line in gate_lines)
+    assert any("verify exit" in line and "OVERALL:" in line for line in gate_lines)
+    assert any("budget can-launch DENIED" in line for line in gate_lines)  # the fixture budget is exhausted
+
+
 def test_ledger_upsert_invalid_status_exits_2(experiments_root: Path) -> None:
     result = run_cli(
         "ledger",

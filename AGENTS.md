@@ -16,9 +16,11 @@ Three parts work together:
 - **`src/intern/`** — the enforcement library. It holds the verification,
   budget, ledger, and dependency-age gates. These gates exit with a nonzero
   code. The skills give instructions. These scripts refuse the run.
-- **`src/training/`** — the lane adapters. They map Hydra configs onto TRL
-  (SFT/DPO), PyTorch Lightning, and axolotl. The axolotl lane takes rendered
-  YAML for a remote GPU machine. axolotl is never a local dependency.
+- **`src/training/`** — the lane adapters. They map Hydra configs onto TRL (SFT,
+  preference, online RL with tool environments, on-policy distillation,
+  self-distillation, and the async vLLM lanes), PyTorch Lightning, and axolotl.
+  The axolotl lane takes rendered YAML for a remote GPU machine. axolotl is
+  never a local dependency.
 
 [docs/001-architecture.md](docs/001-architecture.md) holds the full contract:
 the module APIs, the artifact formats, and the skill conventions. Read that
@@ -56,7 +58,7 @@ src/            # Importable package code
   data/         # loading.py (split loading) + synthetic.py (smoke fixtures)
   intern/       # enforcement library: verify, budget, ledger, callbacks, deps, traces
   training/     # runtime/models/sampling shared; trl/ subpackage, lightning_adapter, axolotl_adapter
-experiments/    # NNN-<slug>/ run artifacts (task/plan/budget/ledger/verify/results)
+experiments/    # NNN-<slug>/ run artifacts (task/plan/budget/ledger/journal/verify/results)
 docs/           # Plans, analyses, design notes (see "Docs conventions")
 tests/          # pytest suite for src/
 trash/          # Gitignored scratchpad for throwaway scripts/output
@@ -114,6 +116,12 @@ Additional conventions:
 All prose in this repo follows ASD-STE100 Simplified Technical English. Agents
 read these files and act on them, so ambiguity causes wrong actions.
 
+Load the `writing-clearly-and-concisely` skill before you write or edit prose.
+The scope includes AGENTS.md, skills, `docs/`, experiment artifacts, commit
+messages, PR text, error messages, and docstrings. The skill holds the full STE
+rule list (`references/asd-ste100.md`), Strunk's _The Elements of Style_, and
+the AI-pattern list.
+
 **Sentence rules** — apply everywhere:
 
 - Write in the active voice. Name the actor: "the gate refuses the run", not
@@ -131,6 +139,12 @@ read these files and act on them, so ambiguity causes wrong actions.
   attempt inside an experiment. Do not swap in synonyms.
 - Do not use slang, idioms, or metaphor. Write the literal fact.
 - Put a complex condition in a vertical list, not in one long sentence.
+- Start each instruction with the verb. Put each condition before its
+  instruction: "If verify exits 1, stop the run."
+- Do not make a noun cluster of more than three nouns.
+- Do not use AI filler: puffery ("pivotal", "crucial"), promotional adjectives
+  ("robust", "seamless"), or AI vocabulary ("delve", "leverage"). Give the
+  number, the path, or the command instead.
 
 **Two deliberate deviations from the standard:**
 
@@ -213,14 +227,20 @@ notes. Never start from the version number alone.
    `results.md`. Do not compare the numbers in silence. Re-run the baseline
    instead.
 
+torch needs two more checks, because `intern.py deps` reads PyPI only. Before a
+torch bump, confirm that the configured Linux index (`pytorch-cu129`) serves the
+target version. Also confirm that a vLLM release that pins that exact torch
+version is ≥ 1 week old. On 2026-09-27, torch 2.14 failed both checks.
+
 A dated, self-expiring entry in `[tool.intern.deps.exceptions]`
 (`package = "YYYY-MM-DD"`) is the deliberate exception to the 1-week floor. A
 reviewer sees the entry in the diff, and the entry re-arms itself. Remove an
-entry after it expires. The native uv equivalent,
-`exclude-newer-package = { pkg = false }`, is a **permanent** opt-out with no
-expiry. Prefer the dated entry. Use the uv option only when you must unblock the
-resolver itself. That case occurs when `uv lock` fails because every version
-that satisfies a specifier is too young.
+entry after it expires. The dated entry does not unblock `uv lock`. If `uv lock`
+fails because every version that satisfies a specifier is too young, also add
+the uv option `exclude-newer-package = { pkg = "<approval date>T00:00:00Z" }`.
+The timestamp limits the opt-out to the releases up to the approval date. Do not
+write `{ pkg = false }`: that form is a **permanent** opt-out with no limit.
+Remove both entries together when the dated entry expires.
 
 ## Hydra configs
 
@@ -251,6 +271,13 @@ them:
 - **One variable per path**: prefer one Hydra override per experiment path. Each
   hypothesis in `plan.md` needs a mechanism, an expected numeric delta, and a
   falsification condition.
+- **Journal**: record each decision that changes the plan with
+  `intern.py journal --experiment NNN add --kind decision --text "..."`. The
+  gates and the training adapters write the `run` and `gate` entries themselves.
+  Read `journal.md` first when you resume an experiment.
+- **Comparable numbers only**: compare two runs only when the `ENV:` lines in
+  their verify.md name the same `trl` and `transformers` versions. For a QLoRA
+  path, the lines must also name the same `bitsandbytes` version.
 - A script that imports from `src/` adds `sys.path.insert(0, str(root / "src"))`
   directly after `rootutils.setup_root(...)`. The library imports stay bare
   (`from intern.verify import ...`). Never write `from src....`. The same style
@@ -326,9 +353,10 @@ The full read surface, in the groups from `.env.example`:
   `COLORIZE`; optional: `FORCE_RICH` (force rich output when stdout is not a
   TTY).
 - **Hugging Face**: `HF_TOKEN` (write scope for `intern.py publish`; hf_jobs
-  lane secret), `HF_USER` (publish repo-id default), `HF_HUB_ENABLE_HF_TRANSFER`
-  (the repo installs hf-transfer, but it stays inert without this var);
-  optional: `HF_HOME`, `HF_HUB_OFFLINE`, `HF_DATASETS_CACHE`, `HF_ENDPOINT`
+  lane secret), `HF_USER` (publish repo-id default); optional:
+  `HF_XET_HIGH_PERFORMANCE` (faster Xet transfers; replaces the removed
+  hf-transfer path), `HF_HUB_DISABLE_TELEMETRY` (opt out of the TRL and Hub
+  usage ping), `HF_HOME`, `HF_HUB_OFFLINE`, `HF_DATASETS_CACHE`, `HF_ENDPOINT`
   (private Hub mirror).
 - **GitHub**: `GITHUB_TOKEN` (`gh search` in literature-recipe-research needs
   it; an unauthenticated `gh search` refuses; `GH_TOKEN` takes precedence when
@@ -337,6 +365,8 @@ The full read surface, in the groups from `.env.example`:
 - **Training**: `SMOKE_TEST` (forces the smoke gate in the training adapters),
   `TOKENIZERS_PARALLELISM`; optional: `PYTORCH_ENABLE_MPS_FALLBACK`,
   `CUDA_VISIBLE_DEVICES`.
+- **RL environments**: optional `OPENREWARD_API_KEY` (TRL's `OpenRewardSpec`
+  reads it when `trainer.env_spec` targets an OpenReward environment).
 - **trackio**: optional `TRACKIO_PROJECT` (project name; defaults to
   `project_name` from `configs/main.yaml` via config interpolation),
   `TRACKIO_DIR` (local metrics DB location, defaults to `$HF_HOME/trackio`). You
@@ -355,18 +385,19 @@ Project-level skills under `.claude/skills/` (auto-discoverable):
 
 <!-- skills-table:start -->
 
-| Skill                        | Use when                                                                                   |
-| ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `autoresearch-loop`          | Generational orchestrator that runs many bounded training experiments to find the best…    |
-| `distill-traces`             | Turn verified agent traces into training data and run the self-distillation loop — define… |
-| `literature-recipe-research` | Isolated-context literature research that returns a ranked table of training recipes with… |
-| `new-doc`                    | Create a new numbered document in docs/ following the NNN-kebab-case-title.md convention   |
-| `new-experiment`             | Scaffold the numbered experiment triple for a training run — entrypoint…                   |
-| `new-script`                 | Scaffold a new runnable Python entrypoint under scripts/python/ together with a paired…    |
-| `publish-model`              | Publish a verified training run to the Hugging Face Hub through the blocking publish gate… |
-| `track-experiments`          | Sets up experiment tracking and runs the alert-driven iteration loop for training runs in… |
-| `train-llm`                  | Plan, launch, and monitor LLM training runs — SFT, DPO, LoRA/QLoRA, pretraining — through… |
-| `verify-run`                 | Run the blocking verification gate on a finished training run and act on the result…       |
+| Skill                           | Use when                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `autoresearch-loop`             | Generational orchestrator that runs many bounded training experiments to find the best…    |
+| `distill-traces`                | Turn verified agent traces into training data and run the self-distillation loop — define… |
+| `literature-recipe-research`    | Isolated-context literature research that returns a ranked table of training recipes with… |
+| `new-doc`                       | Create a new numbered document in docs/ following the NNN-kebab-case-title.md convention   |
+| `new-experiment`                | Scaffold the numbered experiment triple for a training run — entrypoint…                   |
+| `new-script`                    | Scaffold a new runnable Python entrypoint under scripts/python/ together with a paired…    |
+| `publish-model`                 | Publish a verified training run to the Hugging Face Hub through the blocking publish gate… |
+| `track-experiments`             | Sets up experiment tracking and runs the alert-driven iteration loop for training runs in… |
+| `train-llm`                     | Plan, launch, and monitor LLM training runs — SFT, DPO/KTO, LoRA/QLoRA, online RL…         |
+| `verify-run`                    | Run the blocking verification gate on a finished training run and act on the result…       |
+| `writing-clearly-and-concisely` | Write and edit the prose that people and agents read in this repo — AGENTS.md, SKILL.md…   |
 
 <!-- skills-table:end -->
 

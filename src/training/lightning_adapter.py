@@ -12,7 +12,14 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 
 from helper.display import is_interactive
-from training.runtime import run_with_stderr_tee, smoke_enabled
+from training.runtime import (
+    record_run_end,
+    record_run_start,
+    record_setup_failure,
+    run_seed,
+    run_with_stderr_tee,
+    smoke_enabled,
+)
 
 
 class TrackioLightningLogger(Logger):
@@ -108,31 +115,36 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     smoke = smoke_enabled(cfg)
 
     mlog = MetricsLog(experiment_dir / "metrics.jsonl")
-    mlog.append_event("run_start", task="lightning", run_name=OmegaConf.select(cfg, "tracking.run_name"), smoke=smoke)
+    record_run_start(experiment_dir, mlog, "lightning", OmegaConf.select(cfg, "tracking.run_name"), smoke)
 
-    module = hydra.utils.instantiate(cfg.trainer.module)
-    datamodule = hydra.utils.instantiate(cfg.trainer.datamodule)
+    with record_setup_failure(experiment_dir):
+        from lightning.pytorch import seed_everything
 
-    args: dict[str, Any] = OmegaConf.to_container(
-        cfg.trainer.args, resolve=True
-    )  # `_target_: lightning.pytorch.Trainer`
-    args.setdefault("enable_progress_bar", is_interactive())
-    if smoke:
-        # val_check_interval must not exceed the truncated train-batch count, or the
-        # Trainer refuses to start; disable sanity val for the 1-step smoke too.
-        args.update(
-            max_steps=1,
-            limit_train_batches=2,
-            limit_val_batches=1,
-            enable_checkpointing=False,
-            val_check_interval=1.0,
-            num_sanity_val_steps=0,
-        )
+        # Seed before the module builds its weights, as the TRL lane does.
+        seed_everything(run_seed(cfg), workers=True)
+        module = hydra.utils.instantiate(cfg.trainer.module)
+        datamodule = hydra.utils.instantiate(cfg.trainer.datamodule)
 
-    callback = LightningAlertCallback(mlog, str(cfg.tracking.backend), AlertRules())
-    # instantiate the Trainer node with the objects the config can't hold (logger/callbacks) —
-    # the lightning-lane mirror of build_args for the TRL lane. _convert_="all" → plain dicts.
-    trainer = hydra.utils.instantiate(args, logger=_build_logger(cfg), callbacks=[callback], _convert_="all")
+        args: dict[str, Any] = OmegaConf.to_container(
+            cfg.trainer.args, resolve=True
+        )  # `_target_: lightning.pytorch.Trainer`
+        args.setdefault("enable_progress_bar", is_interactive())
+        if smoke:
+            # val_check_interval must not exceed the truncated train-batch count, or the
+            # Trainer refuses to start; disable sanity val for the 1-step smoke too.
+            args.update(
+                max_steps=1,
+                limit_train_batches=2,
+                limit_val_batches=1,
+                enable_checkpointing=False,
+                val_check_interval=1.0,
+                num_sanity_val_steps=0,
+            )
+
+        callback = LightningAlertCallback(mlog, str(cfg.tracking.backend), AlertRules())
+        # instantiate the Trainer node with the objects the config can't hold (logger/callbacks) —
+        # the lightning-lane mirror of build_args for the TRL lane. _convert_="all" → plain dicts.
+        trainer = hydra.utils.instantiate(args, logger=_build_logger(cfg), callbacks=[callback], _convert_="all")
 
     param_count = sum(p.numel() for p in module.parameters())
     mlog.append_event("meta", key="task", value="lightning")
@@ -149,7 +161,7 @@ def run(cfg: DictConfig) -> dict[str, Any]:
     run_with_stderr_tee(lambda: trainer.fit(module, datamodule=datamodule), experiment_dir)
 
     final_train_loss = _final_train_loss(trainer)
-    print(f"VERDICT: TRAIN_OK | final_train_loss={final_train_loss}")
+    record_run_end(experiment_dir, final_train_loss, int(trainer.global_step))
     return {
         "final_train_loss": final_train_loss,
         "steps": int(trainer.global_step),

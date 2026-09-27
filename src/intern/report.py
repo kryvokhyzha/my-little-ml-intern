@@ -1,4 +1,4 @@
-"""Gates dashboard for one experiment: verify verdicts, budget caps/spent, ledger rows (docs/001 contract)."""
+"""Gates dashboard for one experiment: verify verdicts, budget caps/spent, ledger rows, journal tail (docs/001)."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from loguru import logger
 
 from helper.display import get_console, is_interactive, print_table
 from intern.budget import load_budget
+from intern.journal import Journal
 from intern.ledger import Ledger
 
 
@@ -19,6 +20,8 @@ _VERDICT_HEAD_RE = re.compile(r"^VERDICT:\s*(?P<name>\S+)\s*=\s*(?P<status>\S+)\
 _VERIFY_COLUMNS = ["name", "status", "value", "threshold"]
 _BUDGET_COLUMNS = ["cap", "limit", "spent"]
 _LEDGER_COLUMNS = ["path_id", "status", "verify", "final_train_loss", "final_eval_loss", "retry_of"]
+_JOURNAL_COLUMNS = ["ts", "kind", "path_id", "text"]
+_JOURNAL_TAIL = 5
 
 
 def _parse_verify(path: Path) -> dict[str, Any] | None:
@@ -27,6 +30,9 @@ def _parse_verify(path: Path) -> dict[str, Any] | None:
     checks: list[dict[str, str]] = []
     overall: str | None = None
     judgment: str | None = None
+    env: str | None = None
+    waivers: list[str] = []
+    evals: list[str] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.startswith("VERDICT:"):
             parts = line.split(" | ")
@@ -47,7 +53,13 @@ def _parse_verify(path: Path) -> dict[str, Any] | None:
             overall = line.removeprefix("OVERALL:").strip()
         elif line.startswith("JUDGMENT:"):
             judgment = line.removeprefix("JUDGMENT:").strip()
-    return {"checks": checks, "overall": overall, "judgment": judgment}
+        elif line.startswith("ENV:"):
+            env = line.removeprefix("ENV:").strip()
+        elif line.startswith("WAIVER:"):
+            waivers.append(line.removeprefix("WAIVER:").strip())
+        elif line.startswith("EVAL:"):
+            evals.append(line.removeprefix("EVAL:").strip())
+    return {"checks": checks, "overall": overall, "judgment": judgment, "env": env, "waivers": waivers, "evals": evals}
 
 
 def _parse_budget(path: Path) -> dict[str, Any] | None:
@@ -92,6 +104,7 @@ def gates_summary(experiment_dir: Path) -> dict[str, Any]:
         "verify": _parse_verify(experiment_dir / "verify.md"),
         "budget": _parse_budget(experiment_dir / "budget.md"),
         "ledger": _parse_ledger(experiment_dir / "ledger.md"),
+        "journal": Journal(experiment_dir / "journal.md").entries()[-_JOURNAL_TAIL:],
     }
 
 
@@ -102,6 +115,20 @@ def _verdict_line(check: dict[str, str]) -> str:
     )
 
 
+def _annotation_lines(verify: dict[str, Any]) -> list[str]:
+    lines = [f"OVERALL: {verify['overall']}"] if verify["overall"] is not None else []
+    lines += [f"ENV: {verify['env']}"] if verify["env"] is not None else []
+    lines += [f"WAIVER: {waiver}" for waiver in verify["waivers"]]
+    lines += [f"EVAL: {line}" for line in verify["evals"]]
+    lines += [f"JUDGMENT: {verify['judgment']}"] if verify["judgment"] is not None else []
+    return lines
+
+
+def _journal_line(entry: dict[str, Any]) -> str:
+    path = f"{entry['path_id']}: " if entry["path_id"] else ""
+    return f"JOURNAL | {entry['ts']} [{entry['kind']}] {path}{entry['text']}"
+
+
 def _render_plain(summary: dict[str, Any]) -> None:
     scaffold = summary["scaffold"]
     print("SCAFFOLD | complete" if not scaffold else f"SCAFFOLD | MISSING: {', '.join(scaffold)}")
@@ -109,10 +136,8 @@ def _render_plain(summary: dict[str, Any]) -> None:
     if verify is not None:
         for check in verify["checks"]:
             print(_verdict_line(check))
-        if verify["overall"] is not None:
-            print(f"OVERALL: {verify['overall']}")
-        if verify["judgment"] is not None:
-            print(f"JUDGMENT: {verify['judgment']}")
+        for line in _annotation_lines(verify):
+            print(line)
     budget = summary["budget"]
     if budget is not None:
         caps, spent = budget["caps"], budget["spent"]
@@ -123,6 +148,8 @@ def _render_plain(summary: dict[str, Any]) -> None:
         )
     for row in summary["ledger"]:
         print(f"LEDGER | {row['path_id']} | status={row['status']} | verify={row['verify']}")
+    for entry in summary["journal"]:
+        print(_journal_line(entry))
 
 
 def _render_rich(summary: dict[str, Any]) -> None:
@@ -133,10 +160,8 @@ def _render_rich(summary: dict[str, Any]) -> None:
     print_table("Verify checks", _VERIFY_COLUMNS, verify_rows)
     if verify is not None:
         console = get_console()
-        if verify["overall"] is not None:
-            console.print(f"OVERALL: {verify['overall']}")
-        if verify["judgment"] is not None:
-            console.print(f"JUDGMENT: {verify['judgment']}")
+        for line in _annotation_lines(verify):
+            console.print(line)
 
     budget = summary["budget"]
     budget_rows = []
@@ -153,6 +178,9 @@ def _render_rich(summary: dict[str, Any]) -> None:
 
     ledger_rows = [[row[column] for column in _LEDGER_COLUMNS] for row in summary["ledger"]]
     print_table("Ledger", _LEDGER_COLUMNS, ledger_rows)
+
+    journal_rows = [[entry[column] or "" for column in _JOURNAL_COLUMNS] for entry in summary["journal"]]
+    print_table(f"Journal (last {_JOURNAL_TAIL})", _JOURNAL_COLUMNS, journal_rows)
 
 
 def render_gates(experiment_dir: Path, as_json: bool = False) -> None:

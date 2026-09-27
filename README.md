@@ -30,8 +30,9 @@ A personal "ML intern" for working on ML/LLM projects with Claude Code (and othe
   smoke gates, OOM ladders), verification, tracking, literature research, publishing.
 - **Enforcement library** (`src/intern/`) — the guardrails are code, not prose: verification,
   budget, and dependency-age gates exit nonzero and block the workflow.
-- **Training lanes** (`src/training/`) — Hydra configs mapped onto TRL (SFT/DPO), PyTorch
-  Lightning, and axolotl (rendered YAML for remote GPU boxes).
+- **Training lanes** (`src/training/`) — Hydra configs mapped onto TRL (SFT, DPO/KTO, GRPO/RLOO
+  with multi-turn tool environments, on-policy distillation, self-distillation, async vLLM
+  GRPO/distillation), PyTorch Lightning, and axolotl (rendered YAML for remote GPU boxes).
 
 ## 🔁 The loop
 

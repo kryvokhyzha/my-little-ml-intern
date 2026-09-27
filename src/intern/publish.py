@@ -20,7 +20,17 @@ from intern.verify import verify_run
 if TYPE_CHECKING:
     from huggingface_hub import HfApi
 
-_BUNDLE_DOCS = ("task.md", "plan.md", "budget.md", "ledger.md", "run.md", "data.md", "verify.md", "results.md")
+_BUNDLE_DOCS = (
+    "task.md",
+    "plan.md",
+    "budget.md",
+    "ledger.md",
+    "run.md",
+    "data.md",
+    "journal.md",
+    "verify.md",
+    "results.md",
+)
 _MAX_REPO_TRIES = 5
 _PROJECT_NAME_RE = re.compile(r"^project_name:\s*(?P<name>\S+)\s*$")
 

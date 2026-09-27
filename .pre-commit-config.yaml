@@ -18,18 +18,21 @@ repos:
       - id: mixed-line-ending
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.5
+    # Keep this rev equal to the `ruff ~=` pin in [dependency-groups].lint (the CI lint job).
+    rev: v0.16.8
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: ["--fix"]
       - id: ruff-format
 
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.3
     hooks:
       - id: codespell
         types_or: [python, markdown]
         additional_dependencies: [tomli]
+        # Vendored third-party text (Strunk 1918, Wikipedia) stays verbatim.
+        exclude: "^\\.claude/skills/writing-clearly-and-concisely/references/(strunk-|signs-of-ai-writing)"
 
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.0.3
@@ -40,19 +43,20 @@ repos:
         args: [--print-width=80, --prose-wrap=always]
         # experiments/ artifacts (budget.md, ledger.md, verify.md, metrics.jsonl) are
         # machine-parsed; prose-wrap would corrupt them.
-        exclude: "^(README\\.md|experiments/)"
+        # The vendored writing references stay verbatim (re-vendor, never reformat).
+        exclude: "^(README\\.md|experiments/|\\.claude/skills/writing-clearly-and-concisely/references/(strunk-|signs-of-ai-writing))"
 
   - repo: https://github.com/nbQA-dev/nbQA
     rev: 1.9.1
     hooks:
       - id: nbqa-ruff
-        additional_dependencies: [ruff==0.11.4]
+        additional_dependencies: [ruff==0.16.8]
         args: ["--fix", "--show-files"]
       - id: nbqa-ruff-format
-        additional_dependencies: [ruff==0.11.4]
+        additional_dependencies: [ruff==0.16.8]
 
   - repo: https://github.com/kynan/nbstripout
-    rev: 0.8.2
+    rev: 0.9.1
     hooks:
       - id: nbstripout
         files: ".ipynb"

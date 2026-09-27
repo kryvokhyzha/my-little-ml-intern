@@ -80,8 +80,9 @@ not a trainer key. A new quantized model is a new `<name>_4bit.yaml` file.
 - QLoRA requires bitsandbytes. Run `uv sync --group gpu` on the CUDA box (for a
   remote lane, see compute-lanes.md ssh step 2). Without bitsandbytes, the model
   load fails with an error that names that exact command.
-- QLoRA is CUDA-only. A QLoRA path cannot run even the smoke test on MPS or CPU.
-  Run the smoke test directly on the CUDA target (hardware.md).
+- Run the real QLoRA run on CUDA. bitsandbytes ≥ 0.50 also runs the smoke test
+  on CPU: run `uv sync --group gpu`, then add `++trainer.args.use_cpu=true`. MPS
+  is unverified (hardware.md).
 - `verify` auto-SKIPs `param_drift` on a quantized run. 4-bit storage packs two
   elements per byte. `numel()` therefore undercounts ~2×, and the comparison is
   meaningless.

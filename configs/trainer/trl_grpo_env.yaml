@@ -1,0 +1,17 @@
+# GRPO in a multi-turn tool environment (TRL environment_factory). The model calls the
+# environment's tools inside one rollout; TRL parses each tool call, runs the method, feeds
+# the result back, and scores the rollout with the environment's get_reward(). Ships wired
+# to the guess-the-number example (src/training/envs/guess_number.py) — compose it with
+# `data: guess_number`. Swap environment_factory for a real environment.
+# The model needs a tool-calling chat template that TRL can parse (Qwen3, Qwen3.5+, Llama
+# 3.1/3.2, Gemma 4, GPT-OSS, …) — the SmolLM2 and Gemma 1-3 templates are refused.
+defaults:
+  - trl_grpo
+
+# The environment owns the reward (get_reward), so no reward function is required.
+environment_factory: training.envs.guess_number:GuessNumberEnv
+
+args:
+  max_tool_calling_iterations: 10 # tool round-trips per rollout (TRL default: unlimited)
+  max_completion_length: 512 # the whole multi-turn exchange shares this token budget
+  log_completions: true

@@ -59,6 +59,9 @@ Notes:
   produces a NaN, suspect the precision before the data. Never enable bf16 on
   these cards. bf16 silently falls back, or it crashes. The result depends on
   the stack.
+- The locked Linux torch (2.13, `cu129` index) has no V100 or Pascal kernels (it
+  builds sm_75 and newer). A V100 needs the `cu126` torch build. A T4 (sm_75)
+  works.
 - **fp32** — always safe, ~2× memory. It is the correct default for a smoke run
   on CPU/MPS. It is also the correct default when you debug a NaN streak. Rerun
   the step that failed in fp32, to separate a precision bug from a data bug.
@@ -81,5 +84,6 @@ Notes:
   identical CPU run trained cleanly. For a GPTNeoX-family model on Apple
   Silicon, set `+trainer.args.use_cpu=true`. A tiny model trains in seconds on
   CPU anyway.
-- bitsandbytes quantization (QLoRA) is CUDA-only. A QLoRA path cannot run its
-  smoke test on MPS. Run that smoke test on the CUDA target directly.
+- bitsandbytes ≥ 0.50 runs 4-bit layers on CPU, so a QLoRA path can run its
+  smoke test on a CPU box (verified with 0.50.2). MPS support is unverified. Run
+  the real QLoRA run on the CUDA target.

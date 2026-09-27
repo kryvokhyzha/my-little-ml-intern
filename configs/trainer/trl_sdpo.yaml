@@ -1,0 +1,37 @@
+# SDPO — Self-Distillation Policy Optimization (trl.experimental.sdpo). Online RL where the
+# reward functions pick the successful rollouts, and an EMA copy of the model, re-prompted
+# with a successful sibling rollout (and optional environment feedback), distills that
+# solution back into the policy. A GRPO-style loss can blend in (distillation_weight < 1). Needs
+# `prompt`. A `privileged_context` column is read ONLY with include_environment_feedback: true, and
+# it must hold environment feedback (errors, test output) — never the answer (arithmetic_prompts'
+# privileged_context IS the answer, so keep the flag false on that data).
+kind: trl_sdpo
+planned_tokens: null
+peft: null
+# Dotted import paths ('package.module:function'), same contract as trl_grpo.
+reward_funcs: []
+args:
+  _target_: trl.experimental.sdpo.SDPOConfig
+  output_dir: ${experiment_dir}/ckpts
+  teacher_model_kind: ema
+  success_reward_threshold: 1.0 # a rollout at or above this reward counts as a solution
+  # 1.0 = pure self-distillation loss (TRL default); TRL's math example blends 0.5 with the policy loss.
+  distillation_weight: 1.0
+  include_environment_feedback: false
+  # generation_batch_size (= per_device_train_batch_size x steps_per_generation) must be a
+  # multiple of num_generations.
+  num_generations: 8
+  max_completion_length: 256
+  temperature: 1.0
+  max_steps: -1
+  num_train_epochs: 1
+  per_device_train_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 5.0e-5 # TRL default
+  lr_scheduler_type: constant
+  lr_scheduler_kwargs: null
+  logging_steps: 1
+  eval_strategy: "no"
+  save_steps: 200
+  bf16: false
+  seed: ${seed}

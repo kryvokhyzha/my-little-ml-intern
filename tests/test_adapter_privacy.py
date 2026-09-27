@@ -86,6 +86,14 @@ class TestBuildArgsSpacePrivacy:
         assert args.trackio_space_id is None
         assert args.hub_private_repo is None
 
+    def test_no_static_space_on_hub_push_by_default(self, cfg):
+        # transformers would sync the metrics to a static Space on push — public unless hub_private_repo=True.
+        assert _build_args(cfg).trackio_static_space_id is False
+
+    def test_explicit_static_space_wins(self, cfg):
+        cfg.trainer.args.trackio_static_space_id = "me/dash-static"
+        assert _build_args(cfg).trackio_static_space_id == "me/dash-static"
+
 
 class TestLoadModel:
     def test_explicit_dtype_passes_through(self):

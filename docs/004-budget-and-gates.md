@@ -116,20 +116,23 @@ uv run python scripts/python/intern.py deps [--min-age-days 7]
 
 ## The verify gate
 
-`verify` runs eight checks against the experiment's artifacts and writes
+`verify` runs ten checks against the experiment's artifacts and writes
 [verify.md](../experiments/000-tiny-sft-smoke/verify.md) (`VERDICT:` line per
 check, `OVERALL:` line at the end). One line each:
 
-| #   | check               | FAIL when                                                                                                                          |
-| --- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `loss_plausibility` | final train loss outside (0.1·ln V, ln V) for vocab size V; **red flag**: loss < 1.0 on an LM task                                 |
-| 2   | `eval_train_gap`    | \|final eval loss − final train loss\| ≥ 0.5 (eval = `loss(split=eval)`, `eval_loss`, or `val_loss`)                               |
-| 3   | `data_consumption`  | final `num_input_tokens_seen` < 0.7 × `planned_tokens`                                                                             |
-| 4   | `stderr_scan`       | `Traceback` / `RuntimeError` / `CUDA out of memory` in logs/stderr.log (warnings listed but PASS)                                  |
-| 5   | `param_drift`       | opt-in (SKIP unless the experiment sets `model.target_params`): \|`param_count` − `target_params`\| > 15%                          |
-| 6   | `generation_sanity` | logs/samples.jsonl: unique-token ratio < 0.3, one token > 50% of output, a sample < 50 chars — or the file is absent on an LM task |
-| 7   | `reward_margin`     | (auto when DPO metrics present) final `rewards/margins` ≤ 0                                                                        |
-| 8   | `kl_ref`            | (auto when KL metrics present) mean KL non-finite or ≤ 0                                                                           |
+| #   | check                    | FAIL when                                                                                                                                                                                                |
+| --- | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `loss_plausibility`      | final train loss outside (0.1·ln V, ln V) for vocab size V; **red flag**: loss < 1.0 on an LM task                                                                                                       |
+| 2   | `eval_train_gap`         | \|final eval loss − final train loss\| ≥ 0.5 (eval = `loss(split=eval)`, `eval_loss`, or `val_loss`)                                                                                                     |
+| 3   | `data_consumption`       | final `num_input_tokens_seen` < 0.7 × `planned_tokens`                                                                                                                                                   |
+| 4   | `stderr_scan`            | `Traceback` / `RuntimeError` / `CUDA out of memory` in logs/stderr.log (warnings listed but PASS)                                                                                                        |
+| 5   | `param_drift`            | opt-in (SKIP unless the experiment sets `model.target_params`): \|`param_count` − `target_params`\| > 15%                                                                                                |
+| 6   | `generation_sanity`      | logs/samples.jsonl: unique-token ratio < 0.3, one token > 50% of output, a sample < 50 chars, an empty `completion` — or the file is absent on any task except `trl_dpo`/`trl_kto`/`lightning`/`axolotl` |
+| 7   | `reward_margin`          | (auto when DPO metrics present) final `rewards/margins` ≤ 0                                                                                                                                              |
+| 8   | `kl_ref`                 | (auto when KL metrics present) mean KL non-finite or ≤ 0                                                                                                                                                 |
+| 9   | `reward_variance`        | (auto when RL reward metrics present) `reward_std` (SDPO: `self_distillation/reward_std`) is 0 for the whole run, or the `reward` series is constant                                                     |
+| 10  | `completion_termination` | (auto on on-policy lanes) final `completions/clipped_ratio` ≥ 0.95 — the policy stopped emitting EOS                                                                                                     |
+| 11  | `training_signal`        | (auto on SSD / SDPO) the lane activity metric (`ssd/active_sample_ratio`, `self_distillation/reprompt_sample_fraction`) is 0 at every step — the run trained on nothing                                  |
 
 Checks SKIP when their inputs are absent (unless stated otherwise) — 001's
 report is `PASS (5 passed, 0 failed, 3 skipped)` because no eval split and no
@@ -137,9 +140,12 @@ DPO metrics existed.
 
 **Task-awareness.** Checks read the `task` meta from metrics.jsonl.
 `loss_plausibility` applies to LM tasks only (`trl_sft` and unknown count as
-LM); it SKIPs for `trl_dpo` and `lightning`, whose losses are not vocab
-cross-entropy. `reward_margin` and `kl_ref` switch on automatically when DPO
-metrics are present.
+LM); it SKIPs for every other lane — DPO/KTO, RL, distillation, and
+self-distillation losses are not vocab cross-entropy. `generation_sanity` fails
+closed: a missing samples.jsonl SKIPs only for the no-sample lanes (`trl_dpo`,
+`trl_kto`, `lightning`, `axolotl`) and FAILs for every other task, including a
+kind the gate has never seen. `reward_margin`, `kl_ref`, and `reward_variance`
+switch on automatically when their metrics are present.
 
 **run_start scoping.** metrics.jsonl accumulates across paths and retries; every
 check is scoped to records at or after the _last_ `run_start` event (whole file

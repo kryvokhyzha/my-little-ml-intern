@@ -23,22 +23,18 @@ Distillation discipline has three rules. Split the task pool before you collect
 the traces. Verify a trace before you accept it. Hold out the eval tasks before
 you claim a result.
 
-**Two distillation modes — pick one deliberately.** This skill's loop is
+**Pick the distillation mode deliberately.** This skill's loop is
 **OFF-policy**: the student imitates fixed teacher traces through
-`trainer=trl_sft`. Off-policy is cheap. It needs no teacher at training time.
-The student never sees its own mistakes. Worked example:
-`002-distill-off-policy`. **ON-policy** is `trainer=trl_gkd`: the student
-samples its own completions, and a live `model.teacher` (same tokenizer) grades
-them token-level through generalized JSD. On-policy costs more: it runs
-generation and it keeps two resident models. On-policy has no train/inference
-distribution mismatch. Worked example: `003-distill-on-policy`. The 002/003 pair
-differs by exactly that one variable. Start off-policy. Go on-policy when the
-off-policy student plateaus with exposure-bias symptoms: the student imitates
-cleanly but collapses on its own rollouts. **SELF-distillation** (STaR/RFT) uses
-no external teacher: the model trains on its OWN verifier-accepted rollouts.
-Self-distillation is this skill's loop with model = teacher = student. Worked
-end-to-end example: `004-self-distill` (`src/data/self_distill.py` +
-`prep-self-distill.py`).
+`trainer=trl_sft` (worked example: `002-distill-off-policy`). **ON-policy**
+lanes let the student sample its own completions while a live teacher grades
+them token-level: `trl_distill` (stable), `trl_gkd` (003), `trl_gold` (across
+tokenizers), and `trl_async_distill` (vLLM servers). **SELF-distillation** has
+no external teacher: the verified STaR/RFT loop (`004-self-distill`), `trl_sdft`
+(the model with a privileged context is its own teacher), `trl_sdpo`
+(reward-selected successes), and `trl_ssd` (raw self-samples). Start off-policy.
+Go on-policy when the off-policy student imitates cleanly but collapses on its
+own rollouts (exposure bias). Read `references/distillation-modes.md` for the
+full mode table before you pick a lane.
 
 Blocking-gate rule: Never write results.md or report success unless
 `intern.py verify` exited 0. A failed gate means the run failed, regardless of
@@ -136,7 +132,8 @@ converted rows before you train.
 
 Scaffold the training experiment with **new-experiment**. Reuse the collection
 experiment when this run is its first path. Then hand off to **train-llm** on
-the `trainer=trl_sft` lane.
+the `trainer=trl_sft` lane, or on the on-policy / self lane that
+`references/distillation-modes.md` picked.
 
 The dataset-formats reference in train-llm applies verbatim. It also applies its
 tool-calling checks when the traces contain tool calls. The budget gate, the

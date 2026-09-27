@@ -88,13 +88,11 @@ defaults:
 experiment_name: NNN-<slug>
 ```
 
-Swap a group pick only when the task needs it. The picks are `model` ∈
-`smollm2_135m|smollm2_135m_it|smollm2_360m_it|gemma_4_e2b_it|gemma_4_e2b_it_4bit`,
-`data` ∈ `tiny_synthetic|pi_mono_sft|smoltalk_everyday|self_distill_local`,
-`trainer` ∈
-`trl_sft|trl_sft_lora|trl_sft_qlora|trl_dpo|trl_kto|trl_grpo|trl_gkd|lightning|axolotl`,
-`tracking` ∈ `trackio|wandb|none`, and `compute` ∈
-`local|ssh|modal|vast|hf_jobs` (see `configs/*/`).
+Swap a group pick only when the task needs it. The picks are the file names in
+`configs/<group>/` — run `ls configs/model configs/data configs/trainer`. Read
+the header comment of a trainer file before you pick it: it names the columns
+and the `model.teacher` / reward / server needs. The train-llm skill (step 3)
+maps each trainer lane to its use.
 
 **Pick the budget by task** — the caps must fit the work. A smoke run needs
 minutes, and a GRPO run needs hours. Step 5 holds the catalog.
@@ -153,8 +151,9 @@ Rules (from the new-script skill — read it when you are unsure):
 
 - Dispatch ONLY the lanes that the config composes. The shipped scripts do
   exactly this. For another lane, the branch calls
-  `training.trl.run_dpo|run_grpo|run_gkd|run_kto`,
-  `training.lightning_adapter.run`, or `training.axolotl_adapter.render`.
+  `training.trl.run_<kind without trl_>` (`run_grpo`, `run_distill`, `run_sdft`,
+  `run_async_grpo`, …), `training.lightning_adapter.run`, or
+  `training.axolotl_adapter.render`.
 - Keep the adapter imports lazy inside the branches. `--cfg job` and the config
   composition then never need the training dependencies.
 - Write the library imports bare (`from training...`, `from intern...`). Never
@@ -165,7 +164,8 @@ Rules (from the new-script skill — read it when you are unsure):
 ### 5. Create the experiment directory
 
 Create `experiments/NNN-<slug>/` with exactly these five files. Never create
-`results.md` or `verify.md`. The gates write those two files later.
+`results.md` or `verify.md`. The gates write those two files later. The gates
+and the training adapters also create `journal.md` on first use.
 
 `task.md`:
 
