@@ -112,6 +112,7 @@ class TestGatesSummary:
             "verify": None,
             "budget": None,
             "ledger": [],
+            "journal": [],
         }
 
     def test_verify_without_judgment(self, experiment_dir: Path) -> None:
@@ -183,3 +184,22 @@ def test_cli_status_json_exits_0(experiment_dir: Path) -> None:
     assert summary["verify"]["overall"].startswith("PASS")
     assert summary["budget"]["spent"]["paths_launched"] == 1
     assert len(summary["ledger"]) == 2
+
+
+def test_env_waiver_eval_lines_and_journal_tail_are_reported(experiment_dir: Path) -> None:
+    from intern.journal import Journal
+
+    extra = [
+        "ENV: python=3.13.12 trl=1.14.0 device=cpu",
+        "WAIVER: eval_train_gap = WAIVED | structural format gap",
+        "EVAL: success_rate = 0.95 | baseline 0.867",
+    ]
+    (experiment_dir / "verify.md").write_text("\n".join([*VERDICT_LINES, OVERALL_LINE, *extra, JUDGMENT_LINE]) + "\n")
+    for index in range(7):
+        Journal(experiment_dir / "journal.md").append("observation", f"note {index}")
+
+    summary = gates_summary(experiment_dir)
+    assert summary["verify"]["env"] == "python=3.13.12 trl=1.14.0 device=cpu"
+    assert summary["verify"]["waivers"] == ["eval_train_gap = WAIVED | structural format gap"]
+    assert summary["verify"]["evals"] == ["success_rate = 0.95 | baseline 0.867"]
+    assert [entry["text"] for entry in summary["journal"]] == [f"note {i}" for i in range(2, 7)]  # the last 5
