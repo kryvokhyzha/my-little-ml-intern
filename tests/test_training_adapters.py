@@ -1,5 +1,6 @@
 import math
 import os
+from pathlib import Path
 
 import pytest
 import yaml
@@ -16,8 +17,9 @@ from training.trl.config import apply_smoke as _apply_smoke
 from training.trl.config import build_args as _build_args
 from training.trl.config import report_to as _report_to
 from training.trl.config import write_meta as _write_meta
-from training.trl.rewards import grpo_reward_funcs as _grpo_reward_funcs
+from training.trl.rewards import environment_kwargs as _environment_kwargs
 from training.trl.rewards import resolve_reward_funcs as _resolve_reward_funcs
+from training.trl.rewards import reward_funcs_from_cfg as _reward_funcs_from_cfg
 
 
 @pytest.fixture
@@ -55,6 +57,14 @@ class TestApplySmoke:
         args, ds = _apply_smoke({}, None, smoke=True)
         assert args["max_steps"] == 1
         assert ds is None
+
+
+def test_run_seed_keeps_zero():
+    from training.runtime import run_seed
+
+    assert run_seed(OmegaConf.create({"seed": 0})) == 0  # `or 42` would turn 0 into 42
+    assert run_seed(OmegaConf.create({"seed": 7})) == 7
+    assert run_seed(OmegaConf.create({})) == 42
 
 
 class TestSmokeEnabled:
@@ -137,6 +147,26 @@ class TestBuildArgs:
         cfg.trainer.args.project = "explicit"
         args = _build_args(cfg)
         assert args.project == "explicit"
+
+    @pytest.mark.parametrize(
+        ("kind", "expected"),
+        [("trl_sft", "all"), ("trl_dpo", "all"), ("trl_gkd", "all"), ("trl_grpo", "no"), ("trl_sdft", "no")],
+    )
+    def test_token_counter_only_for_dict_batch_lanes(self, cfg, kind, expected):
+        # transformers can count only dict batches; rollout lanes use TRL's num_tokens instead.
+        cfg.trainer.kind = kind
+        assert _build_args(cfg).include_num_input_tokens_seen == expected
+
+    @pytest.mark.parametrize(("kind", "refused"), [("trl_grpo", True), ("trl_dpo", True), ("trl_sft", False)])
+    def test_trainer_only_gc_kwargs_refused_where_trl_reenables(self, cfg, kind, refused):
+        # TRL re-enables checkpointing with the raw kwargs on these lanes; offload/every_n_layers then crash mid-run.
+        cfg.trainer.kind = kind
+        cfg.trainer.args.gradient_checkpointing_kwargs = {"every_n_layers": 2}
+        if refused:
+            with pytest.raises(ValueError, match="every_n_layers"):
+                _build_args(cfg)
+        else:
+            assert _build_args(cfg).gradient_checkpointing_kwargs == {"every_n_layers": 2}
 
     def test_lr_scheduler_kwargs_is_plain_dict(self, cfg):
         # instantiate must not leave nested kwargs as DictConfig — TrainingArguments'
@@ -258,16 +288,64 @@ class TestResolveRewardFuncs:
             _resolve_reward_funcs(["math:pi"])
 
 
-class TestGrpoRewardFuncs:
+class TestRewardFuncsFromCfg:
     @pytest.mark.parametrize("reward_funcs", [[], None])
     def test_empty_raises(self, reward_funcs):
         cfg = OmegaConf.create({"trainer": {"reward_funcs": reward_funcs}})
         with pytest.raises(ValueError, match="at least one reward function"):
-            _grpo_reward_funcs(cfg)
+            _reward_funcs_from_cfg(cfg)
 
     def test_resolves_paths(self):
         cfg = OmegaConf.create({"trainer": {"reward_funcs": ["math:sqrt", "math.dist"]}})
-        assert _grpo_reward_funcs(cfg) == [math.sqrt, math.dist]
+        assert _reward_funcs_from_cfg(cfg) == [math.sqrt, math.dist]
+
+    def test_environment_owns_the_reward(self):
+        # An environment with get_reward() is a reward source — TRL enforces that, not this guard.
+        cfg = OmegaConf.create(
+            {"trainer": {"reward_funcs": [], "environment_factory": "training.envs.guess_number:GuessNumberEnv"}}
+        )
+        assert _reward_funcs_from_cfg(cfg) == []
+
+
+class FakeEnvSpec:
+    """Mimics trl.experimental.harbor.HarborSpec / openreward.OpenRewardSpec for the env_spec node.
+
+    Like the real specs (TRL 1.14), `reward_funcs` is a property that returns ONE callable.
+    """
+
+    def __init__(self, dataset_name: str):
+        self.train_dataset = Dataset.from_dict({"prompt": [dataset_name]})
+        self.environment_factory = dict
+
+    @property
+    def reward_funcs(self):
+        return math.floor
+
+
+class TestEnvironmentKwargs:
+    def test_no_environment_is_empty(self):
+        assert _environment_kwargs(OmegaConf.create({"trainer": {"tools": []}})) == {}
+
+    def test_factory_and_tools_resolve(self):
+        cfg = OmegaConf.create(
+            {"trainer": {"environment_factory": "training.envs.guess_number:GuessNumberEnv", "tools": ["math:sqrt"]}}
+        )
+        kwargs = _environment_kwargs(cfg)
+        assert kwargs["environment_factory"].__name__ == "GuessNumberEnv"
+        assert kwargs["tools"] == [math.sqrt]
+
+    def test_env_spec_supplies_dataset_factory_and_rewards(self):
+        spec = {"_target_": f"{__name__}.FakeEnvSpec", "dataset_name": "harbor-task"}
+        kwargs = _environment_kwargs(OmegaConf.create({"trainer": {"env_spec": spec}}))
+        assert kwargs["train_dataset"]["prompt"] == ["harbor-task"]
+        assert kwargs["environment_factory"] is dict
+        assert kwargs["reward_funcs"] == [math.floor]
+
+    def test_factory_and_spec_together_rejected(self):
+        spec = {"_target_": f"{__name__}.FakeEnvSpec", "dataset_name": "x"}
+        cfg = OmegaConf.create({"trainer": {"environment_factory": "math:sqrt", "env_spec": spec}})
+        with pytest.raises(ValueError, match="not both"):
+            _environment_kwargs(cfg)
 
 
 class TestValidateColumns:
@@ -312,6 +390,25 @@ class TestValidateColumns:
         )
         with pytest.raises(ValueError, match="label"):
             _validate_columns(Dataset.from_dict({"prompt": ["p"], "completion": ["c"]}), "trl_kto", "train")
+
+    @pytest.mark.parametrize(
+        "task", ["trl_rloo", "trl_sdpo", "trl_ssd", "trl_distill", "trl_async_grpo", "trl_async_distill"]
+    )
+    def test_on_policy_lanes_require_prompt(self, task):
+        _validate_columns(Dataset.from_dict({"prompt": ["p"]}), task, "train")
+        with pytest.raises(ValueError, match="prompt"):
+            _validate_columns(Dataset.from_dict({"messages": [[]]}), task, "train")
+
+    def test_sdft_requires_privileged_context(self):
+        _validate_columns(Dataset.from_dict({"prompt": ["p"], "privileged_context": ["c"]}), "trl_sdft", "train")
+        with pytest.raises(ValueError, match="privileged_context"):
+            _validate_columns(Dataset.from_dict({"prompt": ["p"]}), "trl_sdft", "train")
+
+    def test_gold_accepts_messages_or_prompt_completion(self):
+        _validate_columns(Dataset.from_dict({"messages": [[]]}), "trl_gold", "train")
+        _validate_columns(Dataset.from_dict({"prompt": ["p"], "completion": ["c"]}), "trl_gold", "train")
+        with pytest.raises(ValueError, match="messages"):
+            _validate_columns(Dataset.from_dict({"prompt": ["p"]}), "trl_gold", "train")
 
     def test_unknown_task_is_not_checked(self):
         _validate_columns(Dataset.from_dict({"anything": ["x"]}), "lightning", "train")
@@ -486,3 +583,79 @@ class TestTrackioLightningLogger:
         assert lightning_logger.name == "run-x"
         assert TrackioLightningLogger().name == "trackio"
         assert lightning_logger.version == "0"
+
+
+_TRAINER_DIR = Path(__file__).resolve().parents[1] / "configs" / "trainer"
+_TRL_PRESETS = sorted(path.stem for path in _TRAINER_DIR.glob("trl_*.yaml"))
+
+
+@pytest.mark.parametrize("preset", _TRL_PRESETS)
+def test_every_trl_preset_instantiates_against_installed_trl(preset, tmp_path, monkeypatch):
+    """Upgrade guard: a renamed or removed TRL config field fails here, not on the GPU box."""
+    from hydra import compose, initialize_config_dir
+
+    monkeypatch.setenv("TRL_EXPERIMENTAL_SILENCE", "1")
+    overrides = [f"+trainer={preset}", "+tracking=none", "experiment_name=999-x", f"experiment_dir={tmp_path}"]
+    # Field names are the point; bf16 support is the hardware's business (the QLoRA preset pins bf16=true).
+    overrides.append("++trainer.args.bf16=false")
+    with initialize_config_dir(config_dir=str(_TRAINER_DIR.parent), version_base=None):
+        cfg = compose(config_name="main", overrides=overrides)
+    args = _build_args(cfg)
+    assert type(args).__name__ == str(cfg.trainer.args._target_).rsplit(".", 1)[-1]
+
+
+@pytest.mark.parametrize("preset", sorted(path.stem for path in _TRAINER_DIR.glob("*.yaml")))
+def test_every_trainer_kind_has_a_lane_and_a_verify_class(preset):
+    """A new kind must get a run_<kind> entry, and verify classifies it (fail closed on samples)."""
+    import training.trl as trl_lanes
+    from intern.verify import _NO_SAMPLE_TASKS
+
+    kind = yaml.safe_load((_TRAINER_DIR / f"{preset}.yaml").read_text()).get("kind")
+    if kind is None:  # an inheriting preset (e.g. trl_sft_lora) keeps its parent's kind
+        return
+    if kind.startswith("trl_"):
+        assert hasattr(trl_lanes, "run_" + kind.removeprefix("trl_")), f"no training.trl.run_* for {kind}"
+    if kind in ("trl_dpo", "trl_kto", "lightning", "axolotl"):
+        assert kind in _NO_SAMPLE_TASKS
+    else:
+        assert kind not in _NO_SAMPLE_TASKS, f"{kind} is a generative lane — verify must require samples"
+
+
+class _WeightCapture:
+    weights: list = []
+
+    def __init__(self, **kwargs):
+        self.callback_metrics: dict = {}
+        self.global_step = 0
+
+    def fit(self, module, datamodule=None):
+        _WeightCapture.weights.append(module.weight.detach().clone())
+
+
+def test_lightning_lane_seeds_module_init(tmp_path, monkeypatch):
+    import torch
+
+    from training import lightning_adapter
+
+    monkeypatch.delenv("SMOKE_TEST", raising=False)
+    monkeypatch.setattr("lightning.pytorch.Trainer", _WeightCapture)
+    _WeightCapture.weights = []
+    for i, seed in enumerate((7, 7, 8)):
+        cfg = OmegaConf.create(
+            {
+                "seed": seed,
+                "experiment_dir": str(tmp_path / str(i)),
+                "smoke_test": False,
+                "trainer": {
+                    "module": {"_target_": "torch.nn.Linear", "in_features": 4, "out_features": 4},
+                    "datamodule": {"_target_": "builtins.dict"},
+                    "args": {"_target_": "lightning.pytorch.Trainer", "max_steps": 1},
+                },
+                "tracking": {"backend": "none", "run_name": "t"},
+            }
+        )
+        lightning_adapter.run(cfg)
+
+    same, again, other = _WeightCapture.weights
+    assert torch.equal(same, again)  # cfg.seed fixes the module init
+    assert not torch.equal(same, other)
