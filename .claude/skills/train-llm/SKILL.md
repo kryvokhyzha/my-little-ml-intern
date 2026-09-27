@@ -1,14 +1,15 @@
 ---
 name: train-llm
 description:
-  Plan, launch, and monitor LLM training runs — SFT, DPO, LoRA/QLoRA,
-  pretraining — through this repo's trainer lanes (trl_sft, trl_dpo, lightning,
-  axolotl) and compute lanes (local, ssh, hf_jobs, modal, vast), under the
-  budget and verify gates. Use whenever the user says "train", "fine-tune",
-  "launch the run", "start training", "run experiment NNN", "kick off the
-  SFT/DPO run", or when an experiment scaffolded by new-experiment is ready to
-  execute. Also use when a running or failed training run needs diagnosis, an
-  OOM fix, or a retry.
+  Plan, launch, and monitor LLM training runs — SFT, DPO/KTO, LoRA/QLoRA, online
+  RL (GRPO/RLOO, tool environments, async GRPO), on-policy and
+  self-distillation, pretraining — through this repo's trainer lanes (trl_*,
+  lightning, axolotl) and compute lanes (local, ssh, hf_jobs, modal, vast),
+  under the budget and verify gates. Use whenever the user says "train",
+  "fine-tune", "launch the run", "start training", "run experiment NNN", "kick
+  off the SFT/DPO/GRPO run", "train in an environment", or when an experiment
+  scaffolded by new-experiment is ready to execute. Also use when a running or
+  failed training run needs diagnosis, an OOM fix, or a retry.
 ---
 
 # train-llm
@@ -88,11 +89,21 @@ unchanged from the Hub needs no data.md.
 - `trainer=trl_grpo` — online RL (GRPO) on prompt-only data. The trainer samples
   the completions in-loop and grades them with `trainer.reward_funcs`. Read
   `references/grpo-rewards.md` before you write a reward function.
-- `trainer=trl_gkd` — ON-policy distillation (GKD) on `messages` data. The
-  student samples, and a live `model.teacher` (same tokenizer) supervises at the
-  token level through generalized JSD. OFF-policy distillation is plain
-  `trl_sft` on teacher-generated data. See the distill-traces skill for the
-  choice.
+- `trainer=trl_rloo` — online RL with the leave-one-out baseline. Same reward
+  contract as `trl_grpo`, no environments.
+- `trainer=trl_grpo_env` — GRPO inside a multi-turn tool environment
+  (`trainer.environment_factory`, `trainer.tools`, or a packaged
+  `trainer.env_spec`). The model needs a tool-calling template
+  (`model=qwen3_0_6b`). Read `references/environments.md` first.
+- `trainer=trl_async_grpo` / `trl_async_distill` — GPU-only lanes: a vLLM server
+  generates while the trainer trains. Read `references/async-lanes.md` before
+  you plan one; they cannot smoke on CPU.
+- Distillation and self-distillation — `trl_gkd`, `trl_distill` (stable
+  on-policy distillation), `trl_gold` (across tokenizers), `trl_sdft` (the model
+  with a privileged context teaches itself), `trl_sdpo` (distills its own
+  reward-selected successes), `trl_ssd` (SFT on raw self-samples). The
+  distill-traces skill picks the mode. OFF-policy distillation is plain
+  `trl_sft` on teacher output.
 - `trainer=lightning` — custom architectures or loops that do not fit an HF
   Trainer. The lane instantiates the module and datamodule from the config.
 - `trainer=axolotl` — YAML-recipe training. The lane renders the recipe locally,
@@ -184,6 +195,16 @@ action as a new named hypothesis. On a CUDA OOM, read
 `references/oom-recovery.md` and follow the ladder. Never change the method, the
 dataset, or the sequence length without the user's approval.
 
+Record each decision in the journal when you make it: an alert that changes the
+plan, a retry, a waiver, or a surprise. The gates and the training adapters
+write the `run` and `gate` entries themselves. The journal is the first file to
+read when you resume after a context reset.
+
+```bash
+uv run python scripts/python/intern.py journal --experiment NNN add --kind decision --path-id path-2 --text "<what changed and why>"
+uv run python scripts/python/intern.py journal --experiment NNN show --tail 20
+```
+
 ### 8. Verify, record, report
 
 When a path finishes, run the **verify-run** skill. You can also run the
@@ -230,5 +251,7 @@ disk or VM that still bills.
       `intern.py check --experiment NNN` exits 0 (scaffold gate).
 - [ ] You wrote results.md only after verify exited 0, and it names the winning
       path with the ledger comparison.
+- [ ] journal.md holds a `decision` entry for each change to the plan, and a
+      `lesson` entry for what the next experiment must know.
 - [ ] `notify.sh train_done` fired only after a verify that passed. It never
       fires for a run with no passing path.
