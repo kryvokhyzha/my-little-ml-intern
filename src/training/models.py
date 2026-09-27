@@ -37,14 +37,23 @@ def load_ref_model(cfg: DictConfig) -> Any | None:
 
 
 def load_teacher_model(cfg: DictConfig) -> Any:
-    """Instantiate the `model.teacher` node (on-policy distillation); the GKD lane requires it."""
+    """Instantiate the `model.teacher` node; the teacher-driven distillation lanes (gkd, distill, gold) require it."""
     teacher = OmegaConf.select(cfg, "model.teacher")
     if teacher is None:
+        kind = OmegaConf.select(cfg, "trainer.kind")
         raise ValueError(
-            "trainer.kind=trl_gkd requires a `model.teacher` node (same shape as `model.main`; "
-            "teacher and student must share a tokenizer)"
+            f"trainer.kind={kind} requires a `model.teacher` node (same shape as `model.main`; "
+            "teacher and student must share a tokenizer — only trl_gold with use_uld_loss=true lifts that)"
         )
     return _instantiate_model(teacher)
+
+
+def model_id(cfg: DictConfig) -> str:
+    """Return the `model.main` repo id or path; the async lanes take a string and load the model themselves."""
+    args = OmegaConf.select(cfg, "model.main._args_")
+    if not args:
+        raise ValueError("async lanes need `model.main._args_: [<repo id or path>]` — they load the model by name")
+    return str(args[0])
 
 
 def load_tokenizer(cfg: DictConfig) -> Any:

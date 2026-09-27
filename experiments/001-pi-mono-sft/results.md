@@ -23,6 +23,16 @@ test here vs 6,471 / 256).
 Generation judgment: samples emit coherent pi coding-agent output including the
 exact tool-call syntax (`call:read{...}`, `response:...`, `call:bash{...}`).
 
+## Version boundary — TRL 1.7 → 1.14 (2026-09-27)
+
+These numbers came from trl 1.7.x. Up to TRL 1.10, SFT's chunked cross-entropy read
+`final_logit_softcapping` from the top-level model config. For Gemma 4, `AutoModelForCausalLM`
+builds `Gemma4ForConditionalGeneration`, whose top-level config has no such field (it lives in
+`text_config`), so the recorded loss — and the gradient — used UNCAPPED logits. TRL 1.11+
+reads `get_text_config()` and applies the checkpoint's softcap. The training objective changed:
+do not compare these losses with a run on trl ≥ 1.11 — re-run this baseline instead
+([docs/010](../../docs/010-trl-1-14-upgrade.md)).
+
 ## Reproduce
 
 ```bash
