@@ -77,6 +77,10 @@ a strategic open gap. Write the reason into task.md.
 - Do not exceed ~5 epochs over any small dataset (data-constrained scaling).
 - The automated mixture methods (DoReMi, RegMix) converged to roughly the
   natural distribution. They did not beat the manual ablations.
+- Chunk long documents in Python: tokenize once, then slice the ids. Do not use
+  `return_overflowing_tokens=True` with a `stride`. tokenizers 0.23.x drops
+  tokens from the overflow windows (verified on 0.23.2: 30 tokens gave windows
+  of 16 and 8, not 16 and 16).
 
 ## Architecture defaults to reuse
 
