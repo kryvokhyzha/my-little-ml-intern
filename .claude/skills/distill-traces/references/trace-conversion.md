@@ -64,7 +64,7 @@ cannot attribute the resulting delta to a target.
 ```python
 prompt = tokenizer.apply_chat_template(context, add_generation_prompt=True, tokenize=False)
 full = tokenizer.apply_chat_template(context + [assistant_turn], tokenize=False)
-completion = full[len(prompt):]
+completion = full[len(prompt) :]
 ```
 
 It then asserts `full.startswith(prompt)`. When the assert fails, it raises a

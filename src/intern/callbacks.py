@@ -27,6 +27,8 @@ except ImportError:
 
 
 _LOGURU_LEVELS = {"ERROR": "ERROR", "WARN": "WARNING", "WARNING": "WARNING", "INFO": "INFO", "DEBUG": "DEBUG"}
+# wandb takes INFO / WARN / ERROR; trackio takes the lowercase AlertLevel values.
+_BACKEND_LEVELS = {"ERROR": "ERROR", "WARN": "WARN", "WARNING": "WARN", "INFO": "INFO", "DEBUG": "INFO"}
 
 
 @dataclass
@@ -42,8 +44,9 @@ def fire_alert(backend: str, level: str, message: str) -> None:
         try:
             import trackio
 
-            # trackio.alert signature: (title, text=None, level=AlertLevel.WARN, webhook_url=None)
-            trackio.alert(title=message.split(" — ")[0][:120], text=message, level=level)
+            # trackio.alert needs an AlertLevel: with a plain string it logs a UserWarning and stores nothing.
+            alert_level = trackio.AlertLevel(_BACKEND_LEVELS.get(level, "WARN").lower())
+            trackio.alert(title=message.split(" — ")[0][:120], text=message, level=alert_level)
             return
         except Exception as exc:
             logger.debug("trackio alert failed ({}); falling back to log", exc)
@@ -51,7 +54,7 @@ def fire_alert(backend: str, level: str, message: str) -> None:
         try:
             import wandb
 
-            wandb.alert(title=level, text=message)
+            wandb.alert(title=message.split(" — ")[0][:63], text=message, level=_BACKEND_LEVELS.get(level, "WARN"))
             return
         except Exception as exc:
             logger.debug("wandb alert failed ({}); falling back to log", exc)
