@@ -20,12 +20,34 @@ PARAM_DRIFT_MAX_FRACTION = 0.15
 MIN_UNIQUE_TOKEN_RATIO = 0.3
 MAX_TOKEN_SHARE = 0.5
 MIN_SAMPLE_CHARS = 50
+# A completion shorter than this is a short answer ("167"), too short for the repetition proxies.
+MIN_COMPLETION_TOKENS = 10
+MAX_CLIPPED_RATIO = 0.95
 
 # Tasks whose train loss is vocab cross-entropy and which must produce generation samples.
 _LM_TASKS = (None, "trl_sft")
-# GRPO loss is not vocab cross-entropy, but its policy IS a generative LM and the
-# adapter writes samples — so missing samples fail the gate for it too.
-_GENERATION_TASKS = (None, "trl_sft", "trl_grpo", "trl_gkd")
+# Lanes that write no generation samples by design: generation_sanity SKIPs for them. Every other
+# task — including an unknown one — must produce logs/samples.jsonl (fail closed: a new lane
+# can never pass the gate without evidence about its outputs).
+_NO_SAMPLE_TASKS = ("trl_dpo", "trl_kto", "lightning", "axolotl")
+# Lanes whose trainer counts no tokens at all (TRL 1.14): data_consumption SKIPs instead of a false FAIL.
+_UNCOUNTED_TASKS = ("trl_sdft", "trl_sdpo", "trl_ssd", "trl_async_grpo", "trl_async_distill")
+
+# Agent-written verify.md lines that survive a report rewrite. They never change the exit code:
+# a WAIVER records a human-approved exception, it does not turn a FAIL into a PASS.
+ANNOTATION_PREFIXES = ("JUDGMENT:", "WAIVER:", "EVAL:")
+
+# Per-lane activity metrics: 0 at EVERY step means the lane never produced a training signal.
+_ACTIVITY_METRICS = {
+    "ssd/active_sample_ratio": (
+        "SSD's filter dropped every completion (a single-line completion under 10 chars counts as a stub) — "
+        "set filter_empty: false for short-answer tasks"
+    ),
+    "self_distillation/reprompt_sample_fraction": (
+        "no rollout ever reached success_reward_threshold, so SDPO never built a teacher reprompt — "
+        "nothing was distilled"
+    ),
+}
 
 _STDERR_FATAL_RE = re.compile(r"Traceback|RuntimeError|CUDA out of memory")
 _STDERR_WARNING_RE = re.compile(r"warn", re.IGNORECASE)
@@ -79,6 +101,8 @@ class RunVerifier:
         "reward_margin",
         "kl_ref",
         "reward_variance",
+        "completion_termination",
+        "training_signal",
     )
 
     def __init__(self, experiment_dir: Path, vocab_size: int | None = None) -> None:
@@ -90,6 +114,7 @@ class RunVerifier:
             if isinstance(record, dict) and record.get("event") == "run_start":
                 start = index
         self.had_run_start = start is not None
+        self.env = records[start].get("env") if start is not None else None
         self.records = [r for r in (records if start is None else records[start:]) if isinstance(r, dict)]
 
     def run(self, checks: list[str] | None = None) -> list[CheckResult]:
@@ -110,18 +135,23 @@ class RunVerifier:
         n_skip = sum(result.status == "SKIP" for result in results)
         overall = "PASS" if self.passed(results) else "FAIL"
         lines.append(f"OVERALL: {overall} ({n_pass} passed, {n_fail} failed, {n_skip} skipped)")
+        if isinstance(self.env, dict) and self.env:
+            # The provenance of the verified run: numbers are comparable only within one trainer version.
+            lines.append("ENV: " + " ".join(f"{key}={value}" for key, value in self.env.items()))
         return lines
 
     def write_report(self, results: list[CheckResult]) -> Path:
         lines = self.report_lines(results)
         report_path = self.experiment_dir / "verify.md"
         if report_path.exists():
-            # JUDGMENT lines are appended by the agent per the verify-run skill; a re-run
-            # over unchanged metrics (e.g. the publish gate) must not silently drop them.
-            judgments = [
-                line for line in report_path.read_text(encoding="utf-8").splitlines() if line.startswith("JUDGMENT:")
+            # JUDGMENT / WAIVER / EVAL lines are appended by the agent per the verify-run skill; a
+            # re-run over unchanged metrics (e.g. the publish gate) must not silently drop them.
+            annotations = [
+                line
+                for line in report_path.read_text(encoding="utf-8").splitlines()
+                if line.startswith(ANNOTATION_PREFIXES)
             ]
-            lines.extend(judgments)
+            lines.extend(annotations)
         report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         logger.info("Wrote {}", report_path)
         return report_path
@@ -225,10 +255,16 @@ class RunVerifier:
     def _check_data_consumption(self) -> CheckResult:
         name = "data_consumption"
         seen = self._final("num_input_tokens_seen")
+        if not seen:
+            # GRPO / RLOO / distill count their rollout tokens in TRL's own `num_tokens` metric.
+            seen = self._final("num_tokens") or seen
         planned = self._meta("planned_tokens")
         if planned is None:
             return CheckResult(name, "SKIP", seen, None, "planned_tokens meta absent")
         required = DATA_CONSUMPTION_MIN_FRACTION * float(planned)
+        if not seen and self._task() in _UNCOUNTED_TASKS:
+            detail = f"task={self._task()} reports no token count — consumption cannot be measured"
+            return CheckResult(name, "SKIP", seen, required, detail)
         if seen is None:
             return CheckResult(name, "SKIP", None, required, "num_input_tokens_seen never logged")
         status: Status = "PASS" if seen >= required else "FAIL"
@@ -289,11 +325,12 @@ class RunVerifier:
         samples_path = self.experiment_dir / "logs" / "samples.jsonl"
         if not samples_path.exists():
             task = self._task()
-            if task in _GENERATION_TASKS:
-                detail = "logs/samples.jsonl absent — cannot verify generations"
-                return CheckResult(name, "FAIL", None, threshold, detail)
-            return CheckResult(name, "SKIP", None, threshold, f"task={task}: no generation samples expected")
-        samples: list[str] = []
+            if task in _NO_SAMPLE_TASKS:
+                return CheckResult(name, "SKIP", None, threshold, f"task={task}: no generation samples expected")
+            detail = "logs/samples.jsonl absent — cannot verify generations"
+            return CheckResult(name, "FAIL", None, threshold, detail)
+        # (text, completion): `text` is prompt + output; `completion` (absent in older runs) is the output only.
+        samples: list[tuple[str, str | None]] = []
         for line in samples_path.read_text(encoding="utf-8", errors="replace").splitlines():
             if not line.strip():
                 continue
@@ -303,25 +340,32 @@ class RunVerifier:
                 continue
             text = str(record.get("text", "")).strip()
             if text:
-                samples.append(text)
+                completion = record.get("completion")
+                samples.append((text, None if completion is None else str(completion).strip()))
         if not samples:
             return CheckResult(name, "FAIL", None, threshold, "logs/samples.jsonl has no readable samples")
         problems: list[str] = []
         min_ratio: float | None = None
-        for index, sample in enumerate(samples, start=1):
+        for index, (sample, completion) in enumerate(samples, start=1):
             if len(sample) < MIN_SAMPLE_CHARS:
                 problems.append(f"sample {index}: only {len(sample)} chars")
-            tokens = self._sample_tokens(sample)
-            if not tokens:
-                continue
-            counts = Counter(tokens)
-            ratio = len(counts) / len(tokens)
-            share = max(counts.values()) / len(tokens)
-            min_ratio = ratio if min_ratio is None else min(min_ratio, ratio)
-            if ratio < MIN_UNIQUE_TOKEN_RATIO:
-                problems.append(f"sample {index}: unique-token ratio {ratio:.2f}")
-            if share > MAX_TOKEN_SHARE:
-                problems.append(f"sample {index}: one token is {share:.0%} of output")
+            if completion == "":
+                problems.append(f"sample {index}: empty completion — the model emitted no text")
+            targets = [sample]
+            if completion and len(self._sample_tokens(completion)) >= MIN_COMPLETION_TOKENS:
+                targets.append(completion)  # a long chat prompt must not hide a looping answer
+            for target in targets:
+                tokens = self._sample_tokens(target)
+                if not tokens:
+                    continue
+                counts = Counter(tokens)
+                ratio = len(counts) / len(tokens)
+                share = max(counts.values()) / len(tokens)
+                min_ratio = ratio if min_ratio is None else min(min_ratio, ratio)
+                if ratio < MIN_UNIQUE_TOKEN_RATIO:
+                    problems.append(f"sample {index}: unique-token ratio {ratio:.2f}")
+                if share > MAX_TOKEN_SHARE:
+                    problems.append(f"sample {index}: one token is {share:.0%} of output")
         if problems:
             return CheckResult(name, "FAIL", min_ratio, threshold, "; ".join(problems))
         detail = f"{len(samples)} sample(s) pass mechanical proxies — eyeball them; this is necessary, not sufficient"
@@ -347,12 +391,14 @@ class RunVerifier:
     def _check_reward_variance(self) -> CheckResult:
         name = "reward_variance"
         threshold = "std > 0"
-        if self._has_metric("reward_std"):
-            values = self._series("reward_std")
+        # GRPO / RLOO / async GRPO log reward_std; SDPO logs self_distillation/reward_std.
+        std_metric = next((m for m in ("reward_std", "self_distillation/reward_std") if self._has_metric(m)), None)
+        if std_metric is not None:
+            values = self._series(std_metric)
             if values and all(value == 0 for value in values):
                 return CheckResult(name, "FAIL", 0.0, threshold, "no reward variance — the run optimized nothing")
             final = values[-1] if values else None
-            return CheckResult(name, "PASS", final, threshold, f"final reward_std over {len(values)} points")
+            return CheckResult(name, "PASS", final, threshold, f"final {std_metric} over {len(values)} points")
         if self._has_metric("reward"):
             values = self._series("reward")
             mean = sum(values) / len(values)
@@ -362,6 +408,31 @@ class RunVerifier:
                 return CheckResult(name, "FAIL", 0.0, threshold, detail)
             return CheckResult(name, "PASS", std, threshold, f"population std of reward over {len(values)} points")
         return CheckResult(name, "SKIP", None, threshold, "no GRPO reward metrics logged")
+
+    def _check_completion_termination(self) -> CheckResult:
+        name = "completion_termination"
+        threshold = f"< {MAX_CLIPPED_RATIO}"
+        clipped = self._final("completions/clipped_ratio")
+        if clipped is None:
+            detail = "no completions/clipped_ratio logged (not an on-policy lane)"
+            return CheckResult(name, "SKIP", None, threshold, detail)
+        if clipped >= MAX_CLIPPED_RATIO:
+            detail = "almost every on-policy completion hit max_completion_length — the policy stopped emitting EOS"
+            return CheckResult(name, "FAIL", clipped, threshold, detail)
+        detail = "final share of completions truncated at max_completion_length"
+        return CheckResult(name, "PASS", clipped, threshold, detail)
+
+    def _check_training_signal(self) -> CheckResult:
+        name = "training_signal"
+        threshold = "> 0 at some step"
+        for metric, why in _ACTIVITY_METRICS.items():
+            values = self._series(metric)
+            if not values:
+                continue
+            if all(value == 0 for value in values):
+                return CheckResult(name, "FAIL", 0.0, threshold, f"{metric} is 0 at every step: {why}")
+            return CheckResult(name, "PASS", max(values), threshold, f"max {metric} over {len(values)} points")
+        return CheckResult(name, "SKIP", None, threshold, "no lane activity metric logged")
 
 
 def verify_run(
