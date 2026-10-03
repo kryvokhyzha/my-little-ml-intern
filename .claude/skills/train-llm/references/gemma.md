@@ -129,11 +129,28 @@ uses a SentencePiece tokenizer (TRL ≥ 1.14 rule).
   `trl_grpo_env`. The template preserves prefixes, so no training template is
   needed. On a template mismatch, GRPOTrainer raises "Unrecognized chat
   template": set `tokenizer.response_template` by hand.
-- `trl_async_grpo` and `trl_async_distill` force
-  `attn_implementation="kernels-community/flash-attn3"`. FlashAttention-3 caps
-  the head dimension at 256. Gemma 4's global-attention layers use head_dim 512.
-  The async lanes are unverified for Gemma 4, and they likely fail at the first
-  forward pass.
+- `trl_async_grpo` and `trl_async_distill` cannot train Gemma 4 31B as shipped.
+  TRL 1.14.1 hardcodes `attn_implementation="kernels-community/flash-attn3"`
+  (`async_grpo_trainer.py`), and `model_init_kwargs` cannot override it: the
+  call raises `TypeError: got multiple values`. That kernel caps the head
+  dimension at 256, on every GPU. Gemma 4 31B's 10 `full_attention` layers use
+  `global_head_dim` 512 [checked]. The cap is the head size, not the GPU: the
+  kernel ran on an L4 (sm_89) on 2026-09-27. The candidate fix is to patch
+  `create_model_from_path` to load with `sdpa` or `flex_attention`; nobody has
+  tested it here. Expect a dense mask that grows with the square of the row
+  length.
+- **Do not put LoRA on `k_proj` in Gemma 4's global layers.** The 31B config
+  sets `attention_k_eq_v: true` [checked]. On a `full_attention` layer,
+  transformers sets `v_proj = None` and computes `value_states = key_states`
+  (`modeling_gemma4.py`) [checked]. A `k_proj` adapter there changes the keys
+  AND the values in training. vLLM reportedly applies that adapter to the keys
+  only, so the served model would differ from the trained one; this half is read
+  from source and not measured. Exclude `k_proj` on the `full_attention` layers
+  (or everywhere), then compare HF and vLLM logprobs.
+- Train a LoRA on the weights of the checkpoint that you will serve. If that
+  checkpoint is quantized, dequantize it for training. Then measure the logprob
+  parity between the trainer and the server before an RL run: an RL update reads
+  that ratio directly.
 - TRL ≥ 1.11 applies Gemma 4's `final_logit_softcapping` in SFT's chunked loss;
   TRL ≤ 1.10 dropped it (the loss used uncapped logits). Gemma 4 SFT losses from
   before and after that boundary are not comparable (see 001's results.md).

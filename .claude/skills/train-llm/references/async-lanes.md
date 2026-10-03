@@ -32,7 +32,11 @@ GPU-hour buys more steps than on `trl_grpo` / `trl_distill`.
 - Check the attention kernel first. Run
   `uv run --no-sync python -c "from kernels import get_kernel; get_kernel('kernels-community/flash-attn3', version=1)"`.
   If it fails, the Hub has no build for this torch version or GPU architecture.
-  Stop, because both async lanes need it. Nobody has run this check here yet.
+  Stop, because both async lanes need it. This check passed on an NVIDIA L4
+  (compute capability 8.9) with torch 2.13.0+cu129 on 2026-09-27: the Hub served
+  a `torch-stable-abi29-cu128-x86_64-linux` build, and a SmolLM2-135M forward
+  pass through it returned finite bf16 logits. So the kernel is not limited to
+  Hopper. vLLM remains the untested part of both async lanes.
 - The `vllm` package. Every vLLM release pins torch exactly: 0.22–0.26 need
   torch 2.11, and 0.27.1–0.30 need torch 2.13 (this repo's pin). The async NCCL
   weight sync needs vLLM ≥ 0.22. So with torch 2.13 use vLLM 0.27.1–0.29.0

@@ -44,7 +44,7 @@ dependencies = [
     "torch ~= 2.13.0",
     "lightning ~= 2.6.6",
     "transformers ~= 5.17.0",
-    "trl ~= 1.14.0",
+    "trl ~= 1.14.1",
     "peft ~= 0.21.0",
     "datasets ~= 5.0.1",
     "accelerate ~= 1.15.0",
@@ -87,6 +87,8 @@ gpu = [
 # `kernels` extra of the pinned transformers (5.17: >=0.16,<0.17) and move it with every transformers bump.
 async = [
     "kernels ~= 0.16.2",
+    # trl.experimental.async_grpo.openenv_harness (the loop-owning harness lane) imports openenv.
+    "openenv ~= 0.7.0",
 ]
 
 [tool.uv]
@@ -95,7 +97,7 @@ exclude-newer = "7 days"
 # Resolver-level opt-out for a package the user approved before its 1-week cooldown.
 # The timestamp caps the opt-out: trl releases after the approval date stay blocked.
 # Remove the entry together with its [tool.intern.deps.exceptions] twin once it expires.
-exclude-newer-package = { trl = "2026-09-27T00:00:00Z" }
+exclude-newer-package = { trl = "2026-10-03T00:00:00Z", openenv = "2026-10-03T00:00:00Z" }
 environments = [
     "sys_platform == 'darwin'",
     "sys_platform == 'linux'",
@@ -124,7 +126,10 @@ packages = ["src"]
 # Dated, SELF-EXPIRING one-time exceptions to the >=1-week dependency-age gate —
 # NOT a rule change. The gate downgrades the violation to info: until the date,
 # then re-arms itself; remove entries once expired.
-exceptions = { trl = "2026-10-02" }  # trl 1.14.0 (released 2026-09-25), user-approved 2026-09-27
+# trl 1.14.1 (released 2026-09-29) and openenv 0.7.0 (released 2026-10-01), user-approved 2026-10-03.
+# The gate reads [project].dependencies only, so the openenv entry (async group) is the expiry
+# date for its exclude-newer-package twin, not a gate check.
+exceptions = { trl = "2026-10-06", openenv = "2026-10-08" }
 
 [tool.ruff]
 line-length = 120

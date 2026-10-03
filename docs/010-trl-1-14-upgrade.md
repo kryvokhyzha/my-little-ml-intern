@@ -14,7 +14,7 @@ matched except wall-clock time.
 
 | Package                 | Before  | After        | Decision and evidence                                                                                                                                                                                                                  |
 | ----------------------- | ------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| trl                     | 1.8.0   | **1.14.0**   | user-approved exception to the 1-week floor (below)                                                                                                                                                                                    |
+| trl                     | 1.8.0   | **1.14.1**   | user-approved exception to the 1-week floor (below)                                                                                                                                                                                    |
 | transformers            | 5.14.1  | **5.17.0**   | two breaking changes handled (below); every CPU lane A/B bit-identical                                                                                                                                                                 |
 | tokenizers (transitive) | 0.22.2  | 0.23.2       | forced by transformers ≥ 5.16; 74 tokenizer probes identical; one trap, unused here (below)                                                                                                                                            |
 | peft                    | 0.19.1  | **0.21.0**   | LoRA and QLoRA A/B bit-identical; adapters cross-load between versions                                                                                                                                                                 |
@@ -35,31 +35,48 @@ matched except wall-clock time.
 | torch                   | 2.13.0  | 2.13.0       | **hold** 2.14 (below)                                                                                                                                                                                                                  |
 | safetensors             | 0.8.0   | 0.8.0        | current                                                                                                                                                                                                                                |
 
-**Nobody has regenerated the lockfile.** `uv lock` needs download.pytorch.org,
-and this sandbox cannot reach it. uv.lock still pins trl 1.8.0 and the old
-floors, so CI's `uv lock --check` fails and `uv sync --frozen` installs TRL
-1.8.0 until someone relocks. A scratch lock with torch from PyPI resolves the
-full new specifier set (226 packages). Run `uv lock --upgrade`, not a plain
-`uv lock`: the plain form keeps the locked aiohttp 3.14.1 and anyio 4.14.1,
-which carry fixed advisories. Every result below ran against the target versions
-installed from PyPI, not from the lock.
+**The lockfile is current** (2026-09-27). uv.lock pins trl 1.14.0, transformers
+5.17.0, and bitsandbytes 0.50.2 across 227 packages, and `uv lock --check`
+exits 0. The GPU box installed the environment from this lock with
+`uv sync --frozen`. The results in the section below this one ran against the
+target versions installed from PyPI, not from the lock; the GPU results ran from
+the lock.
 
 Left for a separate decision: prettier 3.9 (drops the shell plugin and reflows
 files), the CI actions (checkout v7, setup-uv v10), and a pinned uv version.
 None of them can run here, and each changes CI behavior.
 
-### The TRL exception
+### The TRL and openenv exceptions
 
-The user approved TRL 1.14.0 two days after its release. Two entries bypass the
-cooldown for trl only:
+The user approved TRL 1.14.0 two days after its release (2026-09-27), then TRL
+1.14.1 and openenv 0.7.0 on 2026-10-03. Each package has two entries:
 
-- `[tool.intern.deps.exceptions] trl = "2026-10-02"` — the dated exception that
-  `intern.py deps` reads. It expires the day 1.14.0 turns seven days old.
-- `[tool.uv] exclude-newer-package = { trl = "2026-09-27T00:00:00Z" }` — the
-  resolver opt-out. A timestamp, not `false`: a 1.15 published tomorrow stays
-  blocked.
+- `[tool.intern.deps.exceptions]`: `trl = "2026-10-06"` and
+  `openenv = "2026-10-08"`. Each date is the day the release turns seven days
+  old. `intern.py deps` reads `[project].dependencies` only, so it checks the
+  trl entry and ignores the openenv entry; openenv sits in the `async` group.
+- `[tool.uv] exclude-newer-package`: `trl` and `openenv`, both
+  `"2026-10-03T00:00:00Z"`. A timestamp, not `false`: a release published after
+  the approval date stays blocked.
 
-Remove both after 2026-10-02.
+Remove the trl entries after 2026-10-06 and the openenv entries after
+2026-10-08.
+
+**trl 1.14.1** changes four things (release notes, compare v1.14.0...v1.14.1).
+Two fix vLLM server mode: a crash at the first weight sync on vLLM 0.20–0.25,
+and one completion per sample after a tool call instead of `num_generations`.
+Two fix the CLI scripts, which this repo does not use. No recorded number moved:
+526 tests pass, `tests/test_trl_lanes.py` passes, and the 000 smoke gives
+3.604706287384033 again.
+
+**openenv 0.7.0** splits `openenv.core.harness` into a package and adds RFC 006
+(harness interception with token-faithful traces for TRL). TRL 1.14.1 imports
+`HarnessAdapter`, `HarnessRunLimits`, `ModelStepResult`, and
+`ResourceSessionFactory` from that package; all four still resolve, and
+`trl.experimental.async_grpo.openenv_harness` imports. openenv 0.7.0 adds 52
+packages (gradio, fastmcp, mcp) to the `async` group only and moves `tomlkit`
+from 0.15.1 to 0.14.0 there, because gradio caps it. The default install gains
+nothing.
 
 ### Why torch stays on 2.13
 
@@ -303,9 +320,39 @@ the version bumps change no CPU number.
 - A held-out gain from any on-policy, RL, or self-distillation lane. At this
   scale none moved exact match beyond noise. That needs a real base model.
 - Real checkpoints (SmolLM2, Qwen3-0.6B, Gemma 4): huggingface.co is blocked.
-- Every GPU path: bf16, QLoRA on CUDA, the 1.14 Triton loss kernel, flash-attn3,
-  vLLM, both async lanes, and FSDP2.
-- The lockfile (above).
+- vLLM, both async lanes, and FSDP2. flash-attn3 itself now works (GPU run
+  below); vLLM is the remaining async blocker.
+- Multi-GPU anything. The GPU run used one L4.
+
+## The GPU run (2026-09-27)
+
+One NVIDIA L4 (compute capability 8.9, driver 580, `gcc` present) in
+us-central1-a, installed from uv.lock with `uv sync --frozen`. europe-west4
+stocked out in all three zones.
+
+- **flash-attn3 loads and runs on Ada.** `get_kernel` served a
+  `torch-stable-abi29-cu128-x86_64-linux` build, and a SmolLM2-135M forward pass
+  through it returned finite bf16 logits. The kernel is not Hopper-only.
+- **QLoRA trains on CUDA.** `TRAIN_OK`, loss 3.9596, with 4-bit nf4 + LoRA.
+  bitsandbytes 0.50.2 prints "No prebuilt binary for CUDA 12.9, loading CUDA
+  12.8 instead" and then trains, as the decision table predicted.
+- **Every GPU lane smokes.** 14 lanes reached `VERDICT: TRAIN_OK`: `trl_sft`,
+  `trl_sft_lora`, `trl_sft_qlora`, `trl_dpo`, `trl_kto`, `trl_gkd`, `trl_gold`,
+  `trl_distill`, `trl_sdft`, `trl_sdpo`, `trl_ssd`, `trl_grpo`, `trl_rloo`, and
+  `trl_grpo_env`. The 1.14 Triton kernel compiled on first use. `trl_sft` gave
+  1.5570449829101562 against 1.5570447444915771 on CPU — the float difference of
+  the device, not a change of behavior.
+- **`trl_grpo_env` needs a tool-calling chat template.** Every SmolLM2 model
+  fails it with "The provided chat template does not support tool calling". Use
+  `model=qwen3_0_6b`, which passes.
+- **One real path passed the gate.** 60 steps of `trl_grpo` on the arithmetic
+  pool with `arithmetic_reward`: `TRAIN_OK`, loss 0.1936, and `verify` exit 0 (6
+  passed, 0 failed, 5 skipped). reward 0.1375 → 0.35 over 12 points, reward_std
+  0.2852 → 0.4698, `completions/clipped_ratio` 0.025 → 0.0. The three written
+  samples answered 48+91, 32+84, and 68+50 correctly. The reward moves inside
+  its own noise band, so this proves the plumbing, not a learned gain.
+- **Lightning is not GPU-smoked.** Its `module` and `datamodule` default to
+  null, so the lane carries no runnable default.
 
 ## What we left out, and why
 
@@ -324,17 +371,16 @@ the version bumps change no CPU number.
 
 ## Follow-ups
 
-- Run `uv lock --upgrade` on a machine that reaches download.pytorch.org, then
-  `uv sync --all-extras --no-install-project`, `uv run pytest`, and the 000
-  smoke. Commit the lock.
-- On the first GPU box: run the flash-attn3 kernel check from async-lanes.md,
-  then one QLoRA smoke (bitsandbytes 0.50 loads its CUDA 12.8 library under the
-  cu129 torch).
-- After 2026-10-02: remove the two trl exception entries in pyproject.toml.
-- On each GPU compute lane, run `smoke_test=true` once per lane: the 1.14 Triton
-  kernel JIT-compiles on first use. The box needs a C compiler (`gcc` or
-  `clang`) and Python headers; a CUDA runtime-only image fails with
-  `Failed to find C compiler`.
+- DONE 2026-09-27: the lock is regenerated and `uv lock --check` exits 0. 526
+  tests pass, and the 000 smoke still gives 3.604706287384033 — the same value
+  as before the upgrade.
+- DONE 2026-09-27: the flash-attn3 check, the QLoRA smoke, and one smoke per GPU
+  lane all passed. See "The GPU run".
+- After 2026-10-06: remove the two trl exception entries in pyproject.toml.
+- After 2026-10-08: remove the two openenv exception entries in pyproject.toml.
+- Keep a C compiler on any GPU box: the 1.14 Triton kernel compiles on first
+  use. A CUDA runtime-only image fails with `Failed to find C compiler`. The
+  `common-cu129-ubuntu-2204-nvidia-580` image ships `gcc`.
 - Re-run the 001 and 003 baselines before comparing any new run with them.
 - Seven lanes (`trl_gkd`, `trl_gold`, `trl_sdft`, `trl_sdpo`, `trl_ssd`, both
   async lanes) import from `trl.experimental`, which TRL can delete in any
@@ -343,6 +389,6 @@ the version bumps change no CPU number.
   the stable `trl_distill`.
 - torch 2.14: see "Why torch stays on 2.13".
 - docs/009's multi-GPU `stderr.log` clobbering is still open.
-- On a networked GPU box, run one non-smoke `trl_distill` or `trl_grpo` path on
-  a real checkpoint, then run `intern.py verify` on it. Do this before anyone
-  claims the new lanes work.
+- DONE 2026-09-27 for `trl_grpo` on SmolLM2-135M-Instruct: see "The GPU run".
+  Still open for `trl_distill`, and for any base model large enough to move the
+  held-out metric. Do this before anyone claims the new lanes work.

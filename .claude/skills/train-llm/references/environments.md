@@ -106,12 +106,15 @@ trainer:
 ## Loop-owning agents (opencode, codex, Claude Code)
 
 `trl.experimental.async_grpo.openenv_harness` trains a model under an agent that
-owns its own tool loop. It needs the `openenv~=0.5.0` package from PyPI (not
-`openenv-core`, which stopped at 0.3.0), a vLLM server, and CUDA. The adapter
-does not wire it yet: build a `HarnessRolloutWorker` in the experiment script
-and pass it to `AsyncGRPOTrainer(rollout_worker=...)`. See
-`docs/009-frontier-lanes.md` for the three hooks (`rollout_reward_fn`,
-`train_turn_fn`, `agent_turn_fn`). TRL's worked examples live at
+owns its own tool loop. It needs the `openenv` package, a vLLM server, and CUDA.
+Run `uv sync --group async` for `openenv~=0.7.0` (not `openenv-core`, which
+stopped at 0.3.0). The adapter does not wire it yet: build a
+`HarnessRolloutWorker` in the experiment script and pass it to
+`AsyncGRPOTrainer(rollout_worker=...)`. Read `docs/011-harness-rl.md` first: it
+lists the six gaps, the session contract, and the three hooks
+(`rollout_reward_fn`, `train_turn_fn`, `agent_turn_fn`). trl 1.14.1's worker
+re-tokenizes each prompt; the exact-token trainer is on TRL `main` (PR #6947)
+until the next release. TRL's worked examples live at
 `examples/async_grpo_opencode/` in the TRL repo (moved there in TRL 1.11);
 `opencode_hf_sandbox.py` runs each rollout in a remote HF sandbox, so the box
 needs no Docker.

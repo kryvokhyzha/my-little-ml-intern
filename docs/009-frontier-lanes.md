@@ -1,5 +1,9 @@
 # 009 — Frontier lanes: block-diffusion SFT and in-harness agent RL
 
+> **Update, 2026-10-03:** the loop-owning half below is superseded by
+> [docs/011-harness-rl.md](011-harness-rl.md). TRL 1.14.1 ships
+> `openenv_harness`, and this repo installs openenv 0.7.0.
+
 <!-- Adoption analysis for two upstream TRL capabilities. Verdict first, then the
 mechanism, the blockers, and the trigger that would make each re-evaluable.
 Sources: TRL examples/scripts/sft_diffusion_gemma.py and
