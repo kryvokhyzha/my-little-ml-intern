@@ -83,6 +83,10 @@ notebook = [
 gpu = [
     "bitsandbytes ~= 0.50.2",
 ]
+# Install this group on the workstation that controls Colab runtimes.
+colab = [
+    "google-colab-cli ~= 0.7.4",
+]
 # The async lanes load kernels-community/flash-attn3 through `kernels`. Keep this range equal to the
 # `kernels` extra of the pinned transformers (5.17: >=0.16,<0.17) and move it with every transformers bump.
 async = [
@@ -102,6 +106,9 @@ environments = [
     "sys_platform == 'darwin'",
     "sys_platform == 'linux'",
 ]
+
+[tool.uv.dependency-groups]
+colab = { requires-python = ">=3.12" }
 
 [tool.uv.sources]
 torch = [

@@ -6,7 +6,7 @@ defaults:
   - trainer: trl_sft
   - tracking: none
   - compute: local
-  - budget: default
+  - budget: tiny-sft-colab
   - _self_
 
 experiment_name: 000-tiny-sft-smoke

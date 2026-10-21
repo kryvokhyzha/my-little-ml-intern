@@ -4,3 +4,31 @@
 - 2026-09-27T19:38:18Z [run] VERDICT: TRAIN_OK | final_train_loss=3.604706287384033 | steps=1
 - 2026-10-02T21:11:41Z [run] trl_sft run started (smoke=True) — python=3.13.12 torch=2.13.0 transformers=5.17.0 trl=1.14.1 peft=0.21.0 datasets=5.0.1 accelerate=1.15.0 lightning=2.6.6 kernels=0.16.2 git=90de411+dirty device=mps
 - 2026-10-02T21:11:47Z [run] VERDICT: TRAIN_OK | final_train_loss=3.604706287384033 | steps=1
+- 2026-10-20T10:05:17Z [gate] budget can-launch ALLOWED — allowed: 1/2 paths launched, 0.08/2.0 GPU-h used
+- 2026-10-20T10:08:13Z [gate] budget can-launch ALLOWED — allowed: 1/2 paths launched, 0.08/2.0 GPU-h used
+- 2026-10-20T10:08:41Z [decision] path-7: Run the user-requested one-step smoke on a Colab T4 with use_cpu=false. Preserve baseline artifacts. Retain the full verifier outcome without a waiver; smoke mode omits generation samples.
+- 2026-10-20T10:11:14Z [gate] budget record-gpu-h 0.025849 — paths_launched=1 retries_used=5 gpu_h_used=0.105849
+- 2026-10-20T10:11:14Z [blocker] path-7: Automatic approval review rejected the private project upload to Colab without explicit payload approval. The T4 stopped before project transfer or training. Wait for the pending upload approval.
+- 2026-10-20T10:12:52Z [decision] path-7: The user explicitly approves upload of the checked project archive to their Colab T4 runtime and continuation of the one-step smoke test.
+- 2026-10-20T10:12:53Z [gate] budget can-launch ALLOWED — allowed: 1/2 paths launched, 0.105849/2.0 GPU-h used
+- 2026-10-20T10:22:13Z [gate] budget record-gpu-h 0.111792 — paths_launched=2 retries_used=5 gpu_h_used=0.217641
+- 2026-10-20T10:22:13Z [observation] path-7: The Colab T4 smoke completes one CUDA step with TRAIN_OK and loss 3.6047396659851074. Recovered evidence is under logs/colab-20261020/artifacts/experiments/000-tiny-sft-smoke. The full verify gate exits 1: 544 of 5000 planned tokens and no generation samples.
+- 2026-10-20T10:22:13Z [observation] path-7: The owned T4 session is terminated. Colab reports zero active assignments and a 0.00/hour usage rate. The budget records both allocation intervals once, with a total upper bound of 8.25846 GPU-minutes.
+- 2026-10-20T10:22:13Z [lesson] path-7: Smoke mode validates remote execution but omits generation samples and the full token budget. Preserve its failed full-verification report. Keep historical CPU outputs separate from this live-test evidence.
+- 2026-10-20T15:24:56Z [decision] path-8: The user requests the complete 10-step Colab T4 run and authorizes one more path. Raise max_paths from 2 to 3 through tiny-sft-colab. Preserve all spend counters and the 2 GPU-hour cap.
+- 2026-10-20T15:25:01Z [gate] budget can-launch ALLOWED — allowed: 2/3 paths launched, 0.217641/2.0 GPU-h used
+- 2026-10-20T15:29:47Z [run] trl_sft run started (smoke=True) — python=3.13.15 torch=2.13.0+cu129 transformers=5.17.0 trl=1.14.1 peft=0.21.0 datasets=5.0.1 accelerate=1.15.0 lightning=2.6.6 device=1x Tesla T4
+- 2026-10-20T15:29:59Z [run] VERDICT: TRAIN_OK | final_train_loss=3.6047396659851074 | steps=1
+- 2026-10-20T15:31:33Z [gate] budget can-launch ALLOWED — allowed: 2/3 paths launched, 0.217641/2.0 GPU-h used
+- 2026-10-20T15:31:33Z [gate] budget record-launch — paths_launched=3 retries_used=5 gpu_h_used=0.217641
+- 2026-10-20T15:31:33Z [gate] path-8: ledger upsert status=running verify=pending approach=Colab T4 full 10-step SFT
+- 2026-10-20T15:31:40Z [run] trl_sft run started (smoke=False) — python=3.13.15 torch=2.13.0+cu129 transformers=5.17.0 trl=1.14.1 peft=0.21.0 datasets=5.0.1 accelerate=1.15.0 lightning=2.6.6 device=1x Tesla T4
+- 2026-10-20T15:31:57Z [run] VERDICT: TRAIN_OK | final_train_loss=1.7793203592300415 | steps=10
+- 2026-10-20T15:31:59Z [gate] verify exit 0 — OVERALL: PASS (4 passed, 0 failed, 7 skipped)
+- 2026-10-20T15:34:54Z [gate] verify exit 0 — OVERALL: PASS (4 passed, 0 failed, 7 skipped)
+- 2026-10-20T15:39:58Z [gate] budget record-gpu-h 0.146404 — paths_launched=3 retries_used=5 gpu_h_used=0.364045
+- 2026-10-20T15:39:58Z [gate] path-8: ledger upsert status=passed verify=pass final_train_loss=1.7793203592300415 gpu_min=8.78424
+- 2026-10-20T15:40:12Z [observation] path-8: The full Colab T4 run completes 10 steps with final-step loss 1.7793203592300415 and 5528 tokens. Remote and recovered local verification exit 0, with 4 passed and 7 skipped checks. All three completions pass direct language review for the synthetic corpus.
+- 2026-10-20T15:40:12Z [observation] path-8: The owned T4 session terminates at 2026-10-20T15:34:59.195704Z. Colab confirms zero active assignments and a 0.00/hour usage rate. Record 0.146404 GPU-hours once, including setup and idle time. Total spend is 0.364045 GPU-hours.
+- 2026-10-20T15:40:13Z [lesson] path-8: A fresh smoke validates CUDA before the complete recipe. Ten steps meet the unchanged token and generation gates. Preserve CPU history under logs/cpu-baseline-before-path-8 and append recovered metrics. The recipe saves no checkpoint, and three toy completions establish no held-out quality claim.
+- 2026-10-20T15:42:20Z [gate] verify exit 0 — OVERALL: PASS (4 passed, 0 failed, 7 skipped)

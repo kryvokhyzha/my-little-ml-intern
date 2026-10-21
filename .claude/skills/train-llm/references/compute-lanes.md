@@ -3,10 +3,10 @@
 Each `configs/compute/*.yaml` file defines one lane. The experiment config's
 `compute:` group selects the lane, and `cfg.compute.kind` names the active one.
 
-Status: **local** and **ssh** are v1-complete lanes. **hf_jobs**, **modal**, and
-**vast** are config stubs — the YAML holds placeholders, and no adapter connects
-them to a launch yet. This file documents what a manual launch needs, so that
-you can still use those lanes deliberately.
+Status: **local** and **ssh** are v1-complete lanes. **colab** has a documented
+workflow through the Google Colab CLI and the `intern.py colab-exec` helper.
+**hf_jobs**, **modal**, and **vast** are config stubs. Their YAML holds
+placeholders, and no adapter connects them to a launch yet.
 
 Every lane shares the same artifact contract: checkpoints in
 `experiments/NNN-<slug>/ckpts/`, `logs/train.log`, `logs/stderr.log`,
@@ -22,8 +22,8 @@ box needs `gcc` or `clang` (or `$CC`) and the Python headers. Install `gcc` or
 `clang` on every box. A uv-managed Python already ships the Python headers. A
 system Python needs `python3-dev`. A CUDA runtime-only image fails the first
 training step with `Failed to find C compiler`. Check this on every lane above
-that provisions its own GPU image (`hf_jobs`, `modal`, `vast`), not only on a
-box you set up by hand.
+that provisions its own GPU image (`colab`, `hf_jobs`, `modal`, `vast`), not
+only on a box you set up by hand.
 
 ## local (`configs/compute/local.yaml`) — v1
 
@@ -56,6 +56,22 @@ nohup uv run python scripts/python/NNN-<slug>.py \
 
 Do not shell-redirect into `logs/stderr.log`. The adapter owns that file through
 its own per-run truncating tee.
+
+## colab (`configs/compute/colab.yaml`)
+
+Read `colab.md` for the complete workflow. Use the Google Colab CLI to allocate
+a runtime, upload the project, retrieve artifacts, and stop the runtime. Use
+`intern.py colab-exec` to execute a command on an existing session and collect
+its remote exit code. The helper neither allocates nor stops a runtime.
+
+The config defaults to a T4 GPU. Set `compute.gpu=null` for a CPU runtime. Set
+`compute.session` to the session name after allocation. The config is an
+agent-read parameter sheet, like the other compute configs.
+
+This lane supports CPU and CUDA runtimes. The trainers lack the XLA support that
+TPU runtimes need. The Colab CLI has no runtime-version selector. Probe the
+allocated hardware before the smoke test. Retrieve all experiment artifacts
+before teardown; Colab runtime files are ephemeral.
 
 ## ssh (`configs/compute/ssh.yaml`) — v1
 

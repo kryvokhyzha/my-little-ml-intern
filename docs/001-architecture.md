@@ -140,7 +140,7 @@ pointing at another experiment's artifacts is not.
 
 ## Lane
 
-compute=<local|ssh|hf_jobs|modal|vast> · instance: <e.g. 1x NVIDIA L4 24GB> · region: <if remote>
+compute=<local|ssh|colab|hf_jobs|modal|vast> · instance: <e.g. 1x NVIDIA L4 24GB> · region: <if remote>
 
 ## Prerequisite   (one-time, local; omit if none)
 
@@ -427,6 +427,25 @@ A low loss number is never evidence the model works.
   `status` scaffold line, and the publish gate. Catches "agent forgot to create
   run.md" — the requirement is code, not just the skill's done-condition prose.
 
+### colab.py
+
+- `execute_remote(experiment_dir, command, *, session, state_file, remote_dir="/content/my-little-ml-intern", timeout_s=10800, log_name=None) -> int`
+  — execute a command on an existing Colab runtime. Split the command into
+  arguments without a shell. Use explicit ADC authentication and the supplied
+  session metadata file. Set the remote `PROJECT_ROOT` and working directory to
+  `remote_dir`.
+- The helper downloads a status record with a unique execution ID. It returns
+  the remote exit code. A missing or invalid status record returns 2.
+  `colab exec` alone can exit 0 after a remote Python error.
+- `log_name` selects a file under the remote experiment's `logs/` directory. The
+  helper refuses `stderr.log`, which the training adapter owns. The remote
+  subprocess timeout returns 124. A lost connection can leave the subprocess
+  active; inspect the runtime before a retry.
+- The helper neither allocates nor stops runtimes. The Colab workflow owns
+  project transfer, smoke and budget gates, artifact recovery, and teardown.
+  Never write results.md or report success unless `intern.py verify` exited 0. A
+  failed gate means the run failed, regardless of loss.
+
 ## src/training API
 
 Layout: `training/trl/` is the TRL subpackage (`rewards.py`, `config.py`,
@@ -585,10 +604,13 @@ uv run python scripts/python/intern.py publish --experiment 001 [--repo-id org/n
 uv run python scripts/python/intern.py journal --experiment 001 add --kind decision|observation|lesson|blocker --text "..." [--path-id path-1]
 uv run python scripts/python/intern.py journal --experiment 001 show [--kind decision] [--tail 20]
 uv run python scripts/python/intern.py deps [--min-age-days 7]
+uv run --group colab python scripts/python/intern.py colab-exec --experiment 001 --session NAME --command "uv run python scripts/python/001-slug.py compute=colab smoke_test=true" [--state-file trash/colab/sessions.json] [--remote-dir /content/my-little-ml-intern] [--timeout-s 10800] [--log-name smoke.log]
 ```
 
 Exit codes: 0 ok/allowed, 1 gate failed/denied, 2 usage or missing artifacts.
 These exits are the blocking mechanism — skills must stop on nonzero.
+`colab-exec` also preserves other remote process exit codes, including
+timeout 124. Its exit 0 confirms the command, not experiment verification.
 
 `status` is the gates dashboard for one experiment: verify verdicts (+ ENV /
 WAIVER / EVAL / JUDGMENT lines), budget caps/spent, ledger rows, and the last 5
@@ -669,6 +691,15 @@ plus a parameter sheet that code branches on; `compute` is an agent-read
 parameter sheet no code instantiates; `budget` is a caps sheet parsed from
 budget.md by `intern.budget`. Do not add `_target_` to those — it would be
 cargo-culting a construction pattern onto config that selects behavior.
+
+**Colab compute** (`configs/compute/colab.yaml`) selects the documented CPU/GPU
+workflow in `train-llm/references/colab.md`. Its keys remain agent-read
+parameters. Pass the session, state file, remote directory, and timeout to
+`intern.py colab-exec` explicitly. The helper does not compose Hydra configs.
+The optional `colab` dependency group supplies the local CLI through `uv.lock`.
+Its Python requirement is 3.12 or later. Remote training omits this group. TPU
+execution needs an XLA trainer lane, which this repo does not supply. The Colab
+CLI has no runtime-version selector.
 
 **model group** (`configs/model/<name>.yaml`) — Hydra-instantiable nodes,
 consumed via

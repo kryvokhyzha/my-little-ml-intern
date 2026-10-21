@@ -6,3 +6,5 @@
 | path-4 | adapter dtype fix: explicit fp32 load | failed | 7.291 |  | fail | GPTNeoX numerics broken on MPS even in fp32; healthy on CPU but 40 steps memorizes toy corpus (red-flag loss 0.60) | path-3 |  |  |
 | path-5 | winner: CPU, 10 steps, lr 5e-5, fp32 | failed | 1.671 |  | fail | 14M model degeneracy attractor: 1/3 samples collapses even with sampled decoding | path-4 |  |  |
 | path-6 | SmolLM2-135M, CPU, 10 steps, lr 5e-5, fp32 | passed | 1.779 |  | pass |  | path-5 | 5 |  |
+| path-7 | Colab T4 one-step CUDA smoke | failed | 3.6047396659851074 |  | fail | Smoke-only verification failed: 544 of 5000 planned tokens and no generation samples; CUDA execution returned TRAIN_OK. |  | 8.25846 |  |
+| path-8 | Colab T4 full 10-step SFT | passed | 1.7793203592300415 |  | pass |  |  | 8.78424 |  |

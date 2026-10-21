@@ -214,6 +214,14 @@ def test_unknown_experiment_exits_2(experiments_root: Path) -> None:
     assert result.returncode == 2, result.stderr
 
 
+def test_colab_exec_missing_experiment_exits_2_before_transport() -> None:
+    result = run_cli(
+        "colab-exec", "--experiment", "missing-colab-experiment", "--session", "intern", "--command", "true"
+    )
+    assert result.returncode == 2, result.stderr
+    assert "No experiment matching" in result.stderr
+
+
 def test_ambiguous_experiment_exits_2(experiments_root: Path) -> None:
     (experiments_root / "001-other").mkdir()
     result = run_cli("verify", "--experiment", "001", "--experiments-root", experiments_root)

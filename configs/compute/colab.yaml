@@ -1,0 +1,9 @@
+kind: colab
+# Set gpu to null for a CPU runtime. TPU trainers need XLA support, which this repo lacks.
+gpu: T4
+high_mem: false
+session: null
+state_file: trash/colab/sessions.json
+remote_dir: /content/my-little-ml-intern
+# This timeout limits a command, not the Colab runtime lifetime.
+timeout_s: 10800

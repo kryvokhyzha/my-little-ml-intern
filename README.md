@@ -108,6 +108,15 @@ uv run python scripts/python/001-pi-mono-sft.py model=gemma_4_e2b_it data=pi_mon
 uv run python scripts/python/000-tiny-sft-smoke.py trainer=trl_dpo tracking=wandb compute=ssh
 ```
 
+Google Colab is also a supported compute lane. Follow the
+[Colab setup and workflow](docs/012-colab-compute.md) to allocate a CPU or CUDA
+runtime, transfer the project, execute experiments, and retrieve artifacts.
+Install its optional CLI group with `uv sync --frozen --group colab --no-install-project`.
+Use `uv run --group colab` for local Colab commands and helpers (Python 3.12+).
+The `train-llm` skill reads `compute=colab`; `intern.py colab-exec` executes
+commands on an existing Colab session and reports their remote exit codes.
+TPU training needs XLA support, which this repo does not provide.
+
 ## 🧰 Skills
 
 Source of truth: [`.claude/skills/`](.claude/skills/) (auto-discovered by Claude Code).

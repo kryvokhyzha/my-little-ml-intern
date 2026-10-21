@@ -4,8 +4,8 @@ description:
   Plan, launch, and monitor LLM training runs — SFT, DPO/KTO, LoRA/QLoRA, online
   RL (GRPO/RLOO, tool environments, async GRPO), on-policy and
   self-distillation, pretraining — through this repo's trainer lanes (trl_*,
-  lightning, axolotl) and compute lanes (local, ssh, hf_jobs, modal, vast),
-  under the budget and verify gates. Use whenever the user says "train",
+  lightning, axolotl) and compute lanes (local, ssh, colab, hf_jobs, modal,
+  vast), under the budget and verify gates. Use whenever the user says "train",
   "fine-tune", "launch the run", "start training", "run experiment NNN", "kick
   off the SFT/DPO/GRPO run", "train in an environment", or when an experiment
   scaffolded by new-experiment is ready to execute. Also use when a running or
@@ -153,8 +153,13 @@ the GPU, the precision (bf16/fp16), and the attention implementation.
 ### 6. Launch
 
 Read `references/compute-lanes.md` for the lane that matches `compute.kind`. The
-local and ssh lanes are v1-complete. The hf_jobs, modal, and vast lanes are
-config stubs; the reference states what a launch needs on each lane. Then run:
+local and ssh lanes are v1-complete. The colab lane uses the Google Colab CLI
+and the `intern.py colab-exec` helper. Read `references/colab.md` for its setup,
+status checks, and artifact recovery. For Colab, follow that reference for the
+command locations throughout steps 6–8. Write budget, ledger, and journal
+updates remotely until recovery. Record each launch and GPU-hour spend once. The
+hf_jobs, modal, and vast lanes are config stubs; the reference states what a
+launch needs on each lane. The commands below show the local syntax:
 
 ```bash
 uv run python scripts/python/intern.py budget --experiment NNN record-launch

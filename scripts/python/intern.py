@@ -332,6 +332,32 @@ def deps(min_age_days: int = 7) -> None:
     raise SystemExit(1 if violations else 0)
 
 
+def colab_exec(
+    experiment: str | int,
+    session: str,
+    command: str,
+    state_file: str = "trash/colab/sessions.json",
+    remote_dir: str = "/content/my-little-ml-intern",
+    timeout_s: float = 10800,
+    log_name: str | None = None,
+) -> None:
+    """Execute a command on an existing Colab runtime and return its remote exit code."""
+    from intern.colab import execute_remote
+
+    experiment_dir = _resolve_experiment(experiment, None)
+    state_path = Path(state_file)
+    code = execute_remote(
+        experiment_dir,
+        str(command),
+        session=str(session),
+        state_file=state_path if state_path.is_absolute() else root / state_path,
+        remote_dir=str(remote_dir),
+        timeout_s=float(timeout_s),
+        log_name=log_name,
+    )
+    raise SystemExit(code)
+
+
 if __name__ == "__main__":
     fire.Fire(
         {
@@ -343,5 +369,6 @@ if __name__ == "__main__":
             "publish": publish,
             "journal": journal,
             "deps": deps,
+            "colab-exec": colab_exec,
         }
     )

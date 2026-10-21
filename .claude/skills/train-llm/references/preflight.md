@@ -27,6 +27,7 @@ PRE-FLIGHT — NNN-<slug> / path-<id>
   hyperparameter-priors.md)
 - Artifacts: output_dir=experiments/NNN-<slug>/ckpts, stderr tee to
   logs/stderr.log, samples to logs/samples.jsonl, metrics to metrics.jsonl
+  (remote lanes: <download command and local destination before teardown>)
 - Ledger: path-<id> row upserted (status=running once launched)
 ```
 
@@ -56,12 +57,15 @@ to fail.
    and a job that hits the limit loses all of its work. Fix: size the timeout
    from model × hardware (hardware.md). Add a 20–30% buffer. Write the
    justification in the checklist. Use a minimum of 2h for any real training
-   run.
-5. **Lost artifacts.** A remote filesystem is ephemeral (hf_jobs), or the
+   run. On Colab, `compute.timeout_s` limits a command. Colab can reclaim the
+   runtime before that timeout.
+5. **Lost artifacts.** A remote filesystem is ephemeral (hf_jobs, colab), or the
    provider recycles it (vast). The checkpoints and the logs must land back in
    `experiments/NNN-<slug>/`, through an rsync back or through a Hub push on
    hf_jobs. If they do not, the run leaves no usable result. Fix: plan how the
-   artifacts come back before the launch. That plan is a checklist line.
+   artifacts come back before the launch. That plan is a checklist line. For
+   Colab, download all experiment artifacts before teardown. Read `colab.md` for
+   the transfer commands.
 6. **Batch failures.** You will launch all of the paths at once, and the same
    bug will fail all of them. Fix: launch ONE path first. Confirm that the loss
    lines appear. Then launch the rest.
